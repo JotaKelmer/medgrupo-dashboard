@@ -7,8 +7,14 @@ import {
   ScatterChart,
   Tooltip,
   XAxis,
-  YAxis
+  YAxis,
 } from "recharts";
+import type {
+  Formatter,
+  NameType,
+  ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
+
 import { Card } from "@/components/ui/card";
 import type { CreativeHealthRow } from "@/lib/dashboard/types";
 import { formatPercent } from "@/lib/dashboard/utils";
@@ -17,8 +23,48 @@ const groups = [
   { key: "good", label: "Saudáveis", color: "var(--color-lime)" },
   { key: "warning", label: "Atenção", color: "var(--color-teal)" },
   { key: "replace", label: "Trocar", color: "var(--color-purple)" },
-  { key: "critical", label: "Crítico", color: "#fda4af" }
+  { key: "critical", label: "Crítico", color: "#fda4af" },
 ] as const;
+
+function toNumber(value: ValueType | undefined): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (Array.isArray(value) && value.length > 0) {
+    const first = value[0];
+
+    if (typeof first === "number" && Number.isFinite(first)) {
+      return first;
+    }
+
+    if (typeof first === "string") {
+      const parsed = Number(first);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+
+  return null;
+}
+
+const tooltipFormatter: Formatter<ValueType, NameType> = (
+  value,
+  name
+) => {
+  const numericValue = toNumber(value);
+  const metricName = String(name ?? "").toLowerCase();
+
+  if (metricName === "ctr") {
+    return [formatPercent(numericValue ?? 0), "CTR"];
+  }
+
+  return [numericValue !== null ? numericValue.toFixed(1) : "-", "Frequência"];
+};
 
 export function CreativeMapPanel({ rows }: { rows: CreativeHealthRow[] }) {
   if (!rows.length) {
@@ -59,21 +105,20 @@ export function CreativeMapPanel({ rows }: { rows: CreativeHealthRow[] }) {
               name="CTR"
               tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 12 }}
               stroke="rgba(255,255,255,0.35)"
-              tickFormatter={(value) => formatPercent(Number(value))}
+              tickFormatter={(value: number) => formatPercent(value)}
             />
             <Tooltip
               cursor={{ strokeDasharray: "4 4" }}
               contentStyle={{
                 background: "#121616",
                 border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 16
+                borderRadius: 16,
               }}
-              formatter={(value: number, name: string) =>
-                name === "ctr"
-                  ? [formatPercent(value), "CTR"]
-                  : [value.toFixed(1), "Frequência"]
-              }
-              labelFormatter={(_, payload) => payload?.[0]?.payload?.adName ?? "Criativo"}
+              formatter={tooltipFormatter}
+              labelFormatter={(_, payload) => {
+                const item = payload?.[0]?.payload as CreativeHealthRow | undefined;
+                return item?.adName ?? "Criativo";
+              }}
             />
 
             {groups.map((group) => (

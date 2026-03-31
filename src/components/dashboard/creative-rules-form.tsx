@@ -8,7 +8,7 @@ import type { CreativeRuleRecord } from "@/lib/dashboard/types";
 
 export function CreativeRulesForm({
   workspaceId,
-  initialRules
+  initialRules,
 }: {
   workspaceId: string;
   initialRules: CreativeRuleRecord;
@@ -26,18 +26,22 @@ export function CreativeRulesForm({
     setMessage("");
 
     try {
+      const { workspaceId: _workspaceId, ...rulesWithoutWorkspace } = rules;
+
       const response = await fetch("/api/creative-rules", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           workspaceId,
-          ...rules
-        })
+          ...rulesWithoutWorkspace,
+        }),
       });
 
-      if (!response.ok) throw new Error("Falha ao salvar.");
+      if (!response.ok) {
+        throw new Error("Falha ao salvar.");
+      }
 
       setMessage("Régua de frequência salva.");
     } catch (error) {
@@ -51,22 +55,44 @@ export function CreativeRulesForm({
   return (
     <Card className="space-y-4">
       <div>
-        <p className="text-xs uppercase tracking-[0.24em] text-white/45">Criativos</p>
-        <h2 className="mt-2 text-xl font-semibold text-white">Régua de frequência</h2>
+        <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+          Criativos
+        </p>
+        <h2 className="mt-2 text-xl font-semibold text-white">
+          Régua de frequência
+        </h2>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Field label="Boa até" value={rules.goodMax} onChange={(value) => update("goodMax", value)} />
-        <Field label="Atenção até" value={rules.attentionMax} onChange={(value) => update("attentionMax", value)} />
-        <Field label="Troca até" value={rules.replaceMax} onChange={(value) => update("replaceMax", value)} />
-        <Field label="Crítico a partir de" value={rules.criticalMax} onChange={(value) => update("criticalMax", value)} />
+        <Field
+          label="Boa até"
+          value={rules.goodMax}
+          onChange={(value) => update("goodMax", value)}
+        />
+        <Field
+          label="Atenção até"
+          value={rules.attentionMax}
+          onChange={(value) => update("attentionMax", value)}
+        />
+        <Field
+          label="Troca até"
+          value={rules.replaceMax}
+          onChange={(value) => update("replaceMax", value)}
+        />
+        <Field
+          label="Crítico a partir de"
+          value={rules.criticalMax}
+          onChange={(value) => update("criticalMax", value)}
+        />
       </div>
 
       <div className="flex items-center gap-3">
         <Button onClick={save} disabled={saving}>
           {saving ? "Salvando..." : "Salvar régua"}
         </Button>
-        {message ? <span className="text-sm text-white/60">{message}</span> : null}
+        {message ? (
+          <span className="text-sm text-white/60">{message}</span>
+        ) : null}
       </div>
     </Card>
   );
@@ -75,7 +101,7 @@ export function CreativeRulesForm({
 function Field({
   label,
   value,
-  onChange
+  onChange,
 }: {
   label: string;
   value: number;
@@ -83,8 +109,14 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-xs uppercase tracking-[0.14em] text-white/45">{label}</label>
-      <Input type="number" value={value} onChange={(event) => onChange(Number(event.target.value || 0))} />
+      <label className="mb-1 block text-xs uppercase tracking-[0.14em] text-white/45">
+        {label}
+      </label>
+      <Input
+        type="number"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value || 0))}
+      />
     </div>
   );
 }

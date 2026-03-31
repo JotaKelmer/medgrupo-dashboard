@@ -8,11 +8,54 @@ import {
   ResponsiveContainer,
   Tooltip,
   XAxis,
-  YAxis
+  YAxis,
 } from "recharts";
+import type {
+  Formatter,
+  NameType,
+  ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
+
 import { Card } from "@/components/ui/card";
 import type { TimelinePoint } from "@/lib/dashboard/types";
 import { formatCompact, formatCurrency } from "@/lib/dashboard/utils";
+
+function toNumber(value: ValueType | undefined): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (Array.isArray(value) && value.length > 0) {
+    const first = value[0];
+
+    if (typeof first === "number" && Number.isFinite(first)) {
+      return first;
+    }
+
+    if (typeof first === "string") {
+      const parsed = Number(first);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+  }
+
+  return null;
+}
+
+const tooltipFormatter: Formatter<ValueType, NameType> = (value, name) => {
+  const numericValue = toNumber(value) ?? 0;
+  const metricName = String(name ?? "").toLowerCase();
+
+  if (metricName === "spend" || metricName === "investimento") {
+    return [formatCurrency(numericValue), "Investimento"];
+  }
+
+  return [formatCompact(numericValue), "Resultado"];
+};
 
 export function TimelineChart({ data }: { data: TimelinePoint[] }) {
   return (
@@ -42,26 +85,22 @@ export function TimelineChart({ data }: { data: TimelinePoint[] }) {
               yAxisId="left"
               stroke="rgba(255,255,255,0.35)"
               tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 12 }}
-              tickFormatter={(value) => formatCompact(Number(value))}
+              tickFormatter={(value: number) => formatCompact(Number(value))}
             />
             <YAxis
               yAxisId="right"
               orientation="right"
               stroke="rgba(255,255,255,0.35)"
               tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 12 }}
-              tickFormatter={(value) => formatCompact(Number(value))}
+              tickFormatter={(value: number) => formatCompact(Number(value))}
             />
             <Tooltip
               contentStyle={{
                 background: "#121616",
                 border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 16
+                borderRadius: 16,
               }}
-              formatter={(value: number, name: string) =>
-                name === "spend"
-                  ? [formatCurrency(value), "Investimento"]
-                  : [formatCompact(value), "Resultado"]
-              }
+              formatter={tooltipFormatter}
             />
             <Legend />
             <Line
