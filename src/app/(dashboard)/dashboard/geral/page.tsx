@@ -27,6 +27,7 @@ export default async function GeralPage({
         funnelOptions={data.funnelOptions}
         filters={data.filters}
         includeFunnel
+        showBrandLogo
       />
 
       <KpiGrid kpis={data.kpis} />

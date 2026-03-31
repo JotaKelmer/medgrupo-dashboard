@@ -43,7 +43,7 @@ export function Sidebar() {
               MEDGRUPO
             </p>
             <h1 className="mt-2 text-xl font-semibold text-white">
-              Performance &amp; Planning
+              Mídia &amp; Performance
             </h1>
           </div>
 

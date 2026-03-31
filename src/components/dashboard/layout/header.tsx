@@ -1,11 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FilterBar } from "@/components/dashboard/layout/filter-bar";
 import { Button } from "@/components/ui/button";
 import { useDashboardUI } from "@/contexts/dashboard-ui-context";
 import type { SelectOption } from "@/lib/dashboard/types";
+import { cn } from "@/lib/dashboard/utils";
 import { createClient } from "@/lib/supabase/client";
 
 type DashboardHeaderProps = {
@@ -23,6 +25,7 @@ type DashboardHeaderProps = {
     funnelId?: string;
   };
   includeFunnel?: boolean;
+  showBrandLogo?: boolean;
 };
 
 const secondaryButtonClassName =
@@ -51,19 +54,39 @@ export function DashboardHeader(props: DashboardHeaderProps) {
   return (
     <header className="space-y-4 sm:space-y-5">
       <div className="rounded-3xl border border-white/8 bg-white/3 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div
+          className={cn(
+            "flex flex-col gap-4 xl:flex-row xl:justify-between",
+            props.showBrandLogo ? "xl:items-center" : "xl:items-end"
+          )}
+        >
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-              Dashboard MEDGRUPO
-            </p>
+            {props.showBrandLogo ? (
+              <div className="flex min-h-[72px] items-center">
+                <Image
+                  src="/medgrupo-logo.png"
+                  alt="MEDGRUPO"
+                  width={50}
+                  height={50}
+                  priority
+                  className="h-auto w-[50px] max-w-full sm:w-[50px] lg:w-[50px]"
+                />
+              </div>
+            ) : (
+              <>
+                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                  Dashboard MEDGRUPO
+                </p>
 
-            <h1 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">
-              {props.title}
-            </h1>
+                <h1 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">
+                  {props.title}
+                </h1>
 
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
-              {props.subtitle}
-            </p>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-white/58">
+                  {props.subtitle}
+                </p>
+              </>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

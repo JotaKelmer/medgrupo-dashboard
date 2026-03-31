@@ -12,7 +12,7 @@ import {
   normalizeObjectives,
   toBenchmarkRecord
 } from "./calculations";
-import { DEFAULT_BENCHMARKS, DEFAULT_DATE_RANGE_DAYS } from "./constants";
+import { DEFAULT_BENCHMARKS } from "./constants";
 import { mockSnapshot } from "./mock";
 import type {
   BudgetOverviewData,
@@ -30,7 +30,7 @@ import type {
   SelectOption,
   SyncRunRecord
 } from "./types";
-import { startDateFromDaysBack, toISODate } from "./utils";
+import { toISODate } from "./utils";
 import {
   assertSupabaseServerDataClient,
   getSupabaseConfigDiagnostics,
@@ -284,16 +284,42 @@ function mapSyncRun(row: any): SyncRunRecord {
   };
 }
 
+function getDefaultDateRange() {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  return {
+    startDate: toISODate(yesterday),
+    endDate: toISODate(today)
+  };
+}
+
+function enrichKpisWithBusinessCounts(
+  kpis: ReturnType<typeof buildKpis>,
+  rows: DailyMetricRecord[]
+) {
+  return {
+    ...kpis,
+    leads: rows.reduce((total, row) => total + numberValue(row.leads), 0),
+    messagesStarted: rows.reduce(
+      (total, row) => total + numberValue(row.messagesStarted),
+      0
+    )
+  };
+}
+
 function resolveFilterDefaults(
   input: DashboardFilters,
   workspaceOptions: SelectOption[],
   preferredWorkspaceId?: string
 ) {
-  const today = toISODate(new Date());
+  const defaultDateRange = getDefaultDateRange();
+
   return {
     workspaceId: input.workspaceId ?? preferredWorkspaceId ?? workspaceOptions[0]?.value ?? "",
-    startDate: input.startDate ?? startDateFromDaysBack(DEFAULT_DATE_RANGE_DAYS),
-    endDate: input.endDate ?? today,
+    startDate: input.startDate ?? defaultDateRange.startDate,
+    endDate: input.endDate ?? defaultDateRange.endDate,
     campaignId: input.campaignId ?? "",
     platform: input.platform ?? "all",
     funnelId: input.funnelId ?? ""
@@ -802,7 +828,7 @@ async function getDashboardOverviewFromMock(filtersInput: DashboardFilters): Pro
   });
 
   const budgetComparison = buildBudgetComparison(budgetPlan, dailyRows);
-  const kpis = buildKpis(dailyRows);
+  const kpis = enrichKpisWithBusinessCounts(buildKpis(dailyRows), dailyRows);
 
   return {
     filters: resolvedFilters,
@@ -941,7 +967,7 @@ async function getDashboardOverviewFromSupabase(filtersInput: DashboardFilters):
 
   const { summary, rows } = buildCreativeHealth(dailyRows, campaigns, ads, creativeRules);
   const budgetComparison = buildBudgetComparison(budgetPlan, dailyRows);
-  const kpis = buildKpis(dailyRows);
+  const kpis = enrichKpisWithBusinessCounts(buildKpis(dailyRows), dailyRows);
 
   return {
     filters: resolvedFilters,

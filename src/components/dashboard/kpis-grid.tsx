@@ -6,13 +6,24 @@ import {
   formatPercent
 } from "@/lib/dashboard/utils";
 
+type DashboardKpiMetrics = KpiMetrics & {
+  leads?: number;
+  messagesStarted?: number;
+};
+
 export function KpiGrid({ kpis }: { kpis: KpiMetrics }) {
+  const extendedKpis = kpis as DashboardKpiMetrics;
+
   const items = [
     { label: "Investimento", value: formatCurrency(kpis.investment) },
     { label: "Cliques", value: formatCompact(kpis.clicks) },
+    { label: "Inscrições", value: formatCompact(extendedKpis.leads ?? 0) },
+    {
+      label: "Conversas",
+      value: formatCompact(extendedKpis.messagesStarted ?? 0)
+    },
     { label: kpis.resultLabel || "Resultado", value: formatCompact(kpis.results) },
     { label: "Custo / Resultado", value: formatCurrency(kpis.costPerResult) },
-    { label: "Receita", value: formatCurrency(kpis.revenue) },
     { label: "CTR", value: formatPercent(kpis.ctr) },
     { label: "CPM", value: formatCurrency(kpis.cpm) }
   ];
