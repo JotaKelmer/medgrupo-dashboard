@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/dashboard/utils";
 import { useDashboardUI } from "@/contexts/dashboard-ui-context";
+import Image from "next/image";
 
 const items = [
   { href: "/dashboard/geral", label: "Geral", icon: "◧" },
@@ -37,26 +38,23 @@ export function Sidebar() {
           !isMobile && !isSidebarVisible ? "lg:hidden" : ""
         )}
       >
-        <div className="flex items-start justify-between gap-3 rounded-3xl border border-white/6 bg-white/4 px-4 py-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-white/45">
-              MEDGRUPO
-            </p>
-            <h1 className="mt-2 text-xl font-semibold text-white">
-              Mídia &amp; Performance
-            </h1>
-          </div>
+          <div className="flex items-start justify-between gap-3 rounded-3xl border border-white/6 bg-white/4 px-4 py-4">
+            <div>
+              <div className="relative h-8 w-40">
+                <Image
+                  src="/brands/medgrupo-logo.png"
+                  alt="Logo Medgrupo"
+                  fill
+                  className="object-contain object-left"
+                  priority
+                />
+              </div>
 
-          {isMobile ? (
-            <button
-              type="button"
-              onClick={closeSidebar}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-lg text-white/70"
-            >
-              ×
-            </button>
-          ) : null}
-        </div>
+              <h1 className="mt-3 text-xl font-semibold text-white">
+                Mídia &amp; Performance
+              </h1>
+            </div>
+          </div>
 
         <nav className="space-y-2">
           {items.map((item) => {
@@ -82,13 +80,6 @@ export function Sidebar() {
             );
           })}
         </nav>
-
-        <div className="mt-auto rounded-3xl border border-white/6 bg-white/4 p-4">
-          <p className="text-sm font-medium text-white">Modo dashboard</p>
-          <p className="mt-1 text-sm leading-6 text-white/55">
-            Layout premium escuro com leitura executiva, análise e planejamento.
-          </p>
-        </div>
       </aside>
     </>
   );
