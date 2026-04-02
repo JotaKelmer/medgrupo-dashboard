@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runGoogleSyncRequest } from "@/lib/sync/google-sync";
+import { runMetaSyncRequest } from "@/lib/sync/meta-sync";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,32 +25,16 @@ function getAcceptedSecrets() {
   );
 }
 
-function getSecretForInternalCalls() {
-  return readEnv("INTERNAL_SYNC_SECRET") || readEnv("CRON_SECRET") || "";
-}
-
-async function callInternalSync(params: {
-  request: NextRequest;
-  path: string;
-  secret: string;
-}) {
-  const { request, path, secret } = params;
-  const url = new URL(path, request.nextUrl.origin);
-
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    cache: "no-store",
-    headers: {
-      "x-sync-secret": secret,
-    },
+async function responseToResult(response: Response, path: string) {
+  const data = await response.clone().json().catch(async () => {
+    const text = await response.clone().text().catch(() => "");
+    return text ? { raw: text } : {};
   });
-
-  const data = await response.json().catch(() => ({}));
 
   return {
     ok: response.ok,
     status: response.status,
-    path: url.pathname + url.search,
+    path,
     data,
   };
 }
@@ -68,19 +54,24 @@ async function handleDailySync(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Não autorizado." }, { status: 401 });
   }
 
-  const secretForInternalCalls = getSecretForInternalCalls();
+  const metaRequest = new Request(new URL("/api/sync/meta?mode=realtime", request.nextUrl.origin).toString(), {
+    method: "GET",
+    headers: request.headers,
+  });
+
+  const googleRequest = new Request(new URL("/api/sync/google?mode=realtime", request.nextUrl.origin).toString(), {
+    method: "GET",
+    headers: request.headers,
+  });
+
+  const [metaResponse, googleResponse] = await Promise.all([
+    runMetaSyncRequest(metaRequest, { skipAuth: true }),
+    runGoogleSyncRequest(googleRequest, { skipAuth: true }),
+  ]);
 
   const [meta, google] = await Promise.all([
-    callInternalSync({
-      request,
-      secret: secretForInternalCalls,
-      path: "/api/sync/meta?mode=realtime",
-    }),
-    callInternalSync({
-      request,
-      secret: secretForInternalCalls,
-      path: "/api/sync/google?mode=realtime",
-    }),
+    responseToResult(metaResponse, "/api/sync/meta?mode=realtime"),
+    responseToResult(googleResponse, "/api/sync/google?mode=realtime"),
   ]);
 
   const ok = meta.ok && google.ok;
