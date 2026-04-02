@@ -11,6 +11,7 @@ export const maxDuration = 300;
 
 const PLATFORM = "meta" as const;
 const META_API_VERSION = "v25.0";
+const DASHBOARD_TIMEZONE = "America/Sao_Paulo";
 const DEFAULT_SYNC_DAYS = 2;
 const UPSERT_CHUNK_SIZE = 500;
 const SELECT_CHUNK_SIZE = 100;
@@ -374,6 +375,10 @@ const DAILY_METRICS_COLUMNS = [
   "cost_per_result",
 ].join(", ");
 
+function readEnv(name: string) {
+  return process.env[name]?.trim() ?? "";
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -397,6 +402,22 @@ function toInteger(value: unknown): number {
 }
 
 function toDateString(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function nowInDashboardTimezone() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: DASHBOARD_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function addDays(dateString: string, delta: number) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + delta);
   return date.toISOString().slice(0, 10);
 }
 
@@ -497,13 +518,12 @@ function getSyncPlan(request: NextRequest): SyncPlan {
     };
   }
 
-  const end = new Date();
-  const start = new Date();
-  start.setUTCDate(start.getUTCDate() - (DEFAULT_SYNC_DAYS - 1));
+  const end = nowInDashboardTimezone();
+  const start = addDays(end, -(DEFAULT_SYNC_DAYS - 1));
 
   return {
-    startDate: toDateString(start),
-    endDate: toDateString(end),
+    startDate: start,
+    endDate: end,
     mode: requestedMode === "backfill" ? "backfill" : DEFAULT_SYNC_MODE,
     forceStructureRefresh,
     syncAds: syncAdsParam === "1" || syncAdsParam === "true",
@@ -1441,13 +1461,31 @@ async function syncSingleMetaAccount(params: { supabase: AppSupabaseClient; acco
   }
 }
 
+function getIncomingSyncSecret(request: NextRequest) {
+  const syncSecret = request.headers.get("x-sync-secret")?.trim();
+  if (syncSecret) return syncSecret;
+
+  const authorization = request.headers.get("authorization")?.trim() || "";
+  const bearerMatch = authorization.match(/^Bearer\s+(.+)$/i);
+  return bearerMatch?.[1]?.trim() ?? "";
+}
+
+function getAcceptedSyncSecrets() {
+  return uniqueStrings([readEnv("INTERNAL_SYNC_SECRET"), readEnv("CRON_SECRET")]);
+}
+
 async function handleSync(request: NextRequest) {
-  const internalSecret = request.headers.get("x-sync-secret");
-  const expectedSecret = process.env.INTERNAL_SYNC_SECRET;
-  if (!expectedSecret) {
-    return NextResponse.json({ ok: false, error: "INTERNAL_SYNC_SECRET não configurada." }, { status: 500 });
+  const acceptedSecrets = getAcceptedSyncSecrets();
+  const incomingSecret = getIncomingSyncSecret(request);
+
+  if (acceptedSecrets.length === 0) {
+    return NextResponse.json(
+      { ok: false, error: "INTERNAL_SYNC_SECRET ou CRON_SECRET não configurada." },
+      { status: 500 }
+    );
   }
-  if (internalSecret !== expectedSecret) {
+
+  if (!incomingSecret || !acceptedSecrets.includes(incomingSecret)) {
     return NextResponse.json({ ok: false, error: "Não autorizado." }, { status: 401 });
   }
 

@@ -6,6 +6,8 @@ import {
 } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
 const PLATFORM = "google" as const;
 const GOOGLE_ADS_API_VERSION = "v23";
@@ -1485,17 +1487,33 @@ async function syncSingleGoogleAccount(params: {
   }
 }
 
+function getIncomingSyncSecret(request: NextRequest) {
+  const syncSecret = request.headers.get("x-sync-secret")?.trim();
+  if (syncSecret) return syncSecret;
+
+  const authorization = request.headers.get("authorization")?.trim() || "";
+  const bearerMatch = authorization.match(/^Bearer\s+(.+)$/i);
+  return bearerMatch?.[1]?.trim() ?? "";
+}
+
+function getAcceptedSyncSecrets() {
+  return uniqueStrings([readEnv("INTERNAL_SYNC_SECRET"), readEnv("CRON_SECRET")]);
+}
+
 function ensureSyncAuthorization(request: NextRequest) {
-  const configuredSecret = readEnv("INTERNAL_SYNC_SECRET");
-  if (!configuredSecret) {
+  const acceptedSecrets = getAcceptedSyncSecrets();
+
+  if (acceptedSecrets.length === 0) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error("INTERNAL_SYNC_SECRET não configurada. Em produção, configure a chave para proteger as rotas de sync.");
+      throw new Error(
+        "INTERNAL_SYNC_SECRET ou CRON_SECRET não configurada. Em produção, configure pelo menos uma chave para proteger as rotas de sync."
+      );
     }
     return;
   }
 
-  const headerSecret = request.headers.get("x-sync-secret")?.trim() || "";
-  if (headerSecret !== configuredSecret) {
+  const incomingSecret = getIncomingSyncSecret(request);
+  if (!incomingSecret || !acceptedSecrets.includes(incomingSecret)) {
     throw new Error("Não autorizado.");
   }
 }

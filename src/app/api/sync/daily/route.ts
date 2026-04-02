@@ -4,8 +4,27 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-function getSecret(request: NextRequest) {
-  return request.headers.get("x-sync-secret") || request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || null;
+function readEnv(name: string) {
+  return process.env[name]?.trim() ?? "";
+}
+
+function getIncomingSecret(request: NextRequest) {
+  const syncSecret = request.headers.get("x-sync-secret")?.trim();
+  if (syncSecret) return syncSecret;
+
+  const authorization = request.headers.get("authorization")?.trim() || "";
+  const bearerMatch = authorization.match(/^Bearer\s+(.+)$/i);
+  return bearerMatch?.[1]?.trim() ?? "";
+}
+
+function getAcceptedSecrets() {
+  return Array.from(
+    new Set([readEnv("INTERNAL_SYNC_SECRET"), readEnv("CRON_SECRET")].filter(Boolean))
+  );
+}
+
+function getSecretForInternalCalls() {
+  return readEnv("INTERNAL_SYNC_SECRET") || readEnv("CRON_SECRET") || "";
 }
 
 async function callInternalSync(params: {
@@ -34,40 +53,55 @@ async function callInternalSync(params: {
   };
 }
 
-export async function GET(request: NextRequest) {
-  const expectedSecret = process.env.INTERNAL_SYNC_SECRET?.trim();
-  const incomingSecret = getSecret(request);
+async function handleDailySync(request: NextRequest) {
+  const acceptedSecrets = getAcceptedSecrets();
+  const incomingSecret = getIncomingSecret(request);
 
-  if (!expectedSecret) {
-    return NextResponse.json({ ok: false, error: "INTERNAL_SYNC_SECRET não configurada." }, { status: 500 });
+  if (acceptedSecrets.length === 0) {
+    return NextResponse.json(
+      { ok: false, error: "INTERNAL_SYNC_SECRET ou CRON_SECRET não configurada." },
+      { status: 500 }
+    );
   }
 
-  if (incomingSecret !== expectedSecret) {
+  if (!incomingSecret || !acceptedSecrets.includes(incomingSecret)) {
     return NextResponse.json({ ok: false, error: "Não autorizado." }, { status: 401 });
   }
 
-  const meta = await callInternalSync({
-    request,
-    secret: expectedSecret,
-    path: "/api/sync/meta?mode=realtime&syncAds=1",
-  });
+  const secretForInternalCalls = getSecretForInternalCalls();
 
-  const google = await callInternalSync({
-    request,
-    secret: expectedSecret,
-    path: "/api/sync/google",
-  });
+  const [meta, google] = await Promise.all([
+    callInternalSync({
+      request,
+      secret: secretForInternalCalls,
+      path: "/api/sync/meta?mode=realtime",
+    }),
+    callInternalSync({
+      request,
+      secret: secretForInternalCalls,
+      path: "/api/sync/google?mode=realtime",
+    }),
+  ]);
 
-  return NextResponse.json({
-    ok: meta.ok && google.ok,
-    executedAt: new Date().toISOString(),
-    results: {
-      meta,
-      google,
+  const ok = meta.ok && google.ok;
+
+  return NextResponse.json(
+    {
+      ok,
+      executedAt: new Date().toISOString(),
+      results: {
+        meta,
+        google,
+      },
     },
-  });
+    { status: ok ? 200 : 500 }
+  );
+}
+
+export async function GET(request: NextRequest) {
+  return handleDailySync(request);
 }
 
 export async function POST(request: NextRequest) {
-  return GET(request);
+  return handleDailySync(request);
 }
