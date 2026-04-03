@@ -77,7 +77,9 @@ export function Sidebar() {
                 key={item.href}
                 href={item.href}
                 onClick={closeSidebar}
-                {...(item.external ? { target: "_blank", rel: "noreferrer" } : {})}
+                {...(item.external
+                  ? { target: "_blank", rel: "noreferrer" }
+                  : {})}
                 className={cn(
                   "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
                   active
