@@ -71,9 +71,13 @@ export function getGa4Client(): BetaAnalyticsDataClient {
   return cachedClient;
 }
 
-function normalizeError(error: unknown) {
+function normalizeError(error: unknown): Error {
   if (error instanceof Error) {
     return error;
+  }
+
+  if (typeof error === 'string') {
+    return new Error(error);
   }
 
   return new Error('[GA4] Erro desconhecido ao consultar a API do Google Analytics.');
@@ -86,12 +90,14 @@ export async function batchRunGa4Reports(
   const { propertyId } = getGa4RuntimeConfig();
 
   try {
-    const [response] = await client.batchRunReports({
+    const batchResponse = await (client as any).batchRunReports({
       property: `properties/${propertyId}`,
       requests,
     });
 
-    return (response.reports ?? []) as Ga4ReportResponse[];
+    const response = Array.isArray(batchResponse) ? batchResponse[0] : batchResponse;
+
+    return (response?.reports ?? []) as Ga4ReportResponse[];
   } catch (error) {
     throw normalizeError(error);
   }
