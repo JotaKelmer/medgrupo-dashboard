@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { runGoogleSyncRequest } from "@/lib/sync/google-sync";
 import { runMetaSyncRequest } from "@/lib/sync/meta-sync";
 
@@ -10,7 +10,7 @@ function readEnv(name: string) {
   return process.env[name]?.trim() ?? "";
 }
 
-function getIncomingSecret(request: NextRequest) {
+function getIncomingSecret(request: Request) {
   const syncSecret = request.headers.get("x-sync-secret")?.trim();
   if (syncSecret) return syncSecret;
 
@@ -39,7 +39,7 @@ async function responseToResult(response: Response, path: string) {
   };
 }
 
-async function handleDailySync(request: NextRequest) {
+async function handleDailySync(request: Request) {
   const acceptedSecrets = getAcceptedSecrets();
   const incomingSecret = getIncomingSecret(request);
 
@@ -54,14 +54,22 @@ async function handleDailySync(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Não autorizado." }, { status: 401 });
   }
 
-  const metaRequest = new Request(new URL("/api/sync/meta?mode=realtime", request.nextUrl.origin).toString(), {
+  const origin =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()?.replace(/^(.+)$/, "https://$1") ||
+    process.env.VERCEL_URL?.trim()?.replace(/^(.+)$/, "https://$1") ||
+    "http://localhost:3000";
+
+  const forwardedHeaders = new Headers(request.headers);
+
+  const metaRequest = new Request(`${origin}/api/sync/meta?mode=realtime`, {
     method: "GET",
-    headers: request.headers,
+    headers: forwardedHeaders,
   });
 
-  const googleRequest = new Request(new URL("/api/sync/google?mode=realtime", request.nextUrl.origin).toString(), {
+  const googleRequest = new Request(`${origin}/api/sync/google?mode=realtime`, {
     method: "GET",
-    headers: request.headers,
+    headers: forwardedHeaders,
   });
 
   const [metaResponse, googleResponse] = await Promise.all([
@@ -89,10 +97,10 @@ async function handleDailySync(request: NextRequest) {
   );
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   return handleDailySync(request);
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   return handleDailySync(request);
 }

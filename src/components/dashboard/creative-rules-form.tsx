@@ -6,6 +6,12 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { CreativeRuleRecord } from "@/lib/dashboard/types";
 
+type NumberInputEvent = {
+  target: {
+    value: string | number;
+  };
+};
+
 export function CreativeRulesForm({
   workspaceId,
   initialRules,
@@ -18,7 +24,10 @@ export function CreativeRulesForm({
   const [saving, setSaving] = useState(false);
 
   function update(field: keyof CreativeRuleRecord, value: number) {
-    setRules((current) => ({ ...current, [field]: value }));
+    setRules((current) => ({
+      ...current,
+      [field]: value,
+    }));
   }
 
   async function save() {
@@ -115,7 +124,9 @@ function Field({
       <Input
         type="number"
         value={value}
-        onChange={(event) => onChange(Number(event.target.value || 0))}
+        onChange={(event: NumberInputEvent) =>
+          onChange(Number(event.target.value || 0))
+        }
       />
     </div>
   );

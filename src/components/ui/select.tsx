@@ -1,11 +1,15 @@
-import type { SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/dashboard/utils";
+
+type SelectProps = {
+  className?: string;
+  children?: any;
+} & Record<string, any>;
 
 export function Select({
   className,
   children,
   ...props
-}: SelectHTMLAttributes<HTMLSelectElement>) {
+}: SelectProps) {
   return (
     <select
       className={cn(

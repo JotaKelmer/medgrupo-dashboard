@@ -51,7 +51,7 @@ function buildRequestUrl(startDate: string, endDate: string) {
   return `/api/analytics/ga4?${params.toString()}`;
 }
 
-function hasRelevantValue(value: number | null | undefined) {
+function hasRelevantValue(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && Math.abs(value) > 0.0001;
 }
 
@@ -61,7 +61,7 @@ function formatPlatformMetric(
   formatter: (value: number) => string,
 ) {
   if (!hasRelevantValue(value)) return null;
-  return `${label} ${formatter(value as number)}`;
+  return `${label} ${formatter(value)}`;
 }
 
 function getPlatformCpm(benchmark: DashboardMediaBenchmarks["googleAds"]) {
@@ -216,8 +216,8 @@ export function KpiGrid({
         value: ga4.loading
           ? "Carregando..."
           : ga4.data
-          ? formatCompact(ga4.data.siteConversion.siteVisitors)
-          : "Indisponível",
+            ? formatCompact(ga4.data.siteConversion.siteVisitors)
+            : "Indisponível",
         caption: "Google Analytics",
         tone: "analytics",
         notes: ga4.data
@@ -226,13 +226,24 @@ export function KpiGrid({
               `Inscrições ${ga4.data.heroCards.signups.formattedValue}`,
             ]
           : ga4.error
-          ? ["Dados indisponíveis no momento"]
-          : ["Aguardando retorno do GA4"],
+            ? ["Dados indisponíveis no momento"]
+            : ["Aguardando retorno do GA4"],
       });
     }
 
     return cards;
-  }, [ga4.data, ga4.error, ga4.loading, googleCurrent.impressions, hideAnalytics, kpis.cpm, kpis.impressions, mediaBenchmarks.googleAds, mediaBenchmarks.metaAds, metaCurrent.impressions]);
+  }, [
+    ga4.data,
+    ga4.error,
+    ga4.loading,
+    googleCurrent.impressions,
+    hideAnalytics,
+    kpis.cpm,
+    kpis.impressions,
+    mediaBenchmarks.googleAds,
+    mediaBenchmarks.metaAds,
+    metaCurrent.impressions,
+  ]);
 
   const rowTwo = useMemo<MetricCard[]>(
     () => [
@@ -289,10 +300,7 @@ export function KpiGrid({
         label: "Conversas",
         value: formatCompact(kpis.messagesStarted),
         caption: "Mensagens iniciadas",
-        notes:
-          kpis.messagesStarted > 0
-            ? ["Meta Ads"]
-            : ["Sem conversas no período"],
+        notes: kpis.messagesStarted > 0 ? ["Meta Ads"] : ["Sem conversas no período"],
       },
       {
         label: "Tx Conversão",
@@ -376,25 +384,33 @@ export function KpiGrid({
     <section className="space-y-4">
       <div className={cn("grid gap-4", hideAnalytics ? "xl:grid-cols-2" : "xl:grid-cols-3")}>
         {rowOne.map((card) => (
-          <KpiCard key={card.label} card={card} />
+          <div key={card.label}>
+            <KpiCard card={card} />
+          </div>
         ))}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
         {rowTwo.map((card) => (
-          <KpiCard key={card.label} card={card} />
+          <div key={card.label}>
+            <KpiCard card={card} />
+          </div>
         ))}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {rowThree.map((card) => (
-          <KpiCard key={card.label} card={card} />
+          <div key={card.label}>
+            <KpiCard card={card} />
+          </div>
         ))}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
         {rowFour.map((card) => (
-          <KpiCard key={card.label} card={card} />
+          <div key={card.label}>
+            <KpiCard card={card} />
+          </div>
         ))}
       </div>
     </section>

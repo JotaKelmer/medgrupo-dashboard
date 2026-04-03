@@ -1,10 +1,17 @@
-import type { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/dashboard/utils";
+
+type ButtonProps = {
+  className?: string;
+  children?: any;
+  type?: "button" | "submit" | "reset";
+  onClick?: any;
+  disabled?: boolean;
+} & Record<string, any>;
 
 export function Button({
   className,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonProps) {
   return (
     <button
       className={cn(

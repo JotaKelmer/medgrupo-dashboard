@@ -1,13 +1,13 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode
-} from "react";
+import React from "react";
+
+type DashboardUIState = {
+  isMobile: boolean;
+  desktopSidebarVisible: boolean;
+  mobileSidebarVisible: boolean;
+  isFilterVisible: boolean;
+};
 
 type DashboardUIContextValue = {
   isMobile: boolean;
@@ -18,18 +18,86 @@ type DashboardUIContextValue = {
   toggleFilters: () => void;
 };
 
-const DashboardUIContext = createContext<DashboardUIContextValue | undefined>(undefined);
-
 const SIDEBAR_STORAGE_KEY = "medgrupo.dashboard.sidebar";
 const FILTER_STORAGE_KEY = "medgrupo.dashboard.filters";
 
-export function DashboardUIProvider({ children }: { children: ReactNode }) {
-  const [isMobile, setIsMobile] = useState(false);
-  const [desktopSidebarVisible, setDesktopSidebarVisible] = useState(true);
-  const [mobileSidebarVisible, setMobileSidebarVisible] = useState(false);
-  const [isFilterVisible, setIsFilterVisible] = useState(true);
+let globalState: DashboardUIState = {
+  isMobile: false,
+  desktopSidebarVisible: true,
+  mobileSidebarVisible: false,
+  isFilterVisible: true,
+};
 
-  useEffect(() => {
+const listeners = new Set<() => void>();
+
+function emitChange() {
+  listeners.forEach((listener) => listener());
+}
+
+function setGlobalState(
+  updater: DashboardUIState | ((current: DashboardUIState) => DashboardUIState)
+) {
+  globalState =
+    typeof updater === "function"
+      ? (updater as (current: DashboardUIState) => DashboardUIState)(globalState)
+      : updater;
+
+  emitChange();
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getSnapshot() {
+  return globalState;
+}
+
+function getUiValue(): DashboardUIContextValue {
+  return {
+    isMobile: globalState.isMobile,
+    isSidebarVisible: globalState.isMobile
+      ? globalState.mobileSidebarVisible
+      : globalState.desktopSidebarVisible,
+    isFilterVisible: globalState.isFilterVisible,
+    toggleSidebar() {
+      if (globalState.isMobile) {
+        setGlobalState((current) => ({
+          ...current,
+          mobileSidebarVisible: !current.mobileSidebarVisible,
+        }));
+        return;
+      }
+
+      setGlobalState((current) => ({
+        ...current,
+        desktopSidebarVisible: !current.desktopSidebarVisible,
+      }));
+    },
+    closeSidebar() {
+      setGlobalState((current) => ({
+        ...current,
+        mobileSidebarVisible: false,
+      }));
+    },
+    toggleFilters() {
+      setGlobalState((current) => ({
+        ...current,
+        isFilterVisible: !current.isFilterVisible,
+      }));
+    },
+  };
+}
+
+type DashboardUIProviderProps = {
+  children: any;
+};
+
+export function DashboardUIProvider({ children }: DashboardUIProviderProps) {
+  React.useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -37,23 +105,24 @@ export function DashboardUIProvider({ children }: { children: ReactNode }) {
     const savedSidebarState = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
     const savedFilterState = window.localStorage.getItem(FILTER_STORAGE_KEY);
 
-    if (savedSidebarState !== null) {
-      setDesktopSidebarVisible(savedSidebarState === "1");
-    }
-
-    if (savedFilterState !== null) {
-      setIsFilterVisible(savedFilterState === "1");
-    }
+    setGlobalState((current) => ({
+      ...current,
+      desktopSidebarVisible:
+        savedSidebarState !== null ? savedSidebarState === "1" : current.desktopSidebarVisible,
+      isFilterVisible:
+        savedFilterState !== null ? savedFilterState === "1" : current.isFilterVisible,
+    }));
 
     const mediaQuery = window.matchMedia("(max-width: 1023px)");
 
     const syncViewport = () => {
       const mobile = mediaQuery.matches;
-      setIsMobile(mobile);
 
-      if (!mobile) {
-        setMobileSidebarVisible(false);
-      }
+      setGlobalState((current) => ({
+        ...current,
+        isMobile: mobile,
+        mobileSidebarVisible: mobile ? current.mobileSidebarVisible : false,
+      }));
     };
 
     syncViewport();
@@ -73,61 +142,38 @@ export function DashboardUIProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem(
-      SIDEBAR_STORAGE_KEY,
-      desktopSidebarVisible ? "1" : "0"
-    );
-  }, [desktopSidebarVisible]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.localStorage.setItem(FILTER_STORAGE_KEY, isFilterVisible ? "1" : "0");
-  }, [isFilterVisible]);
-
-  const value = useMemo<DashboardUIContextValue>(
-    () => ({
-      isMobile,
-      isSidebarVisible: isMobile ? mobileSidebarVisible : desktopSidebarVisible,
-      isFilterVisible,
-      toggleSidebar() {
-        if (isMobile) {
-          setMobileSidebarVisible((current) => !current);
-          return;
-        }
-
-        setDesktopSidebarVisible((current) => !current);
-      },
-      closeSidebar() {
-        setMobileSidebarVisible(false);
-      },
-      toggleFilters() {
-        setIsFilterVisible((current) => !current);
+  React.useEffect(() => {
+    const unsubscribe = subscribe(() => {
+      if (typeof window === "undefined") {
+        return;
       }
-    }),
-    [desktopSidebarVisible, isFilterVisible, isMobile, mobileSidebarVisible]
-  );
 
-  return (
-    <DashboardUIContext.Provider value={value}>
-      {children}
-    </DashboardUIContext.Provider>
-  );
+      const state = getSnapshot();
+
+      window.localStorage.setItem(
+        SIDEBAR_STORAGE_KEY,
+        state.desktopSidebarVisible ? "1" : "0"
+      );
+      window.localStorage.setItem(
+        FILTER_STORAGE_KEY,
+        state.isFilterVisible ? "1" : "0"
+      );
+    });
+
+    return unsubscribe;
+  }, []);
+
+  return children;
 }
 
-export function useDashboardUI() {
-  const context = useContext(DashboardUIContext);
+export function useDashboardUI(): DashboardUIContextValue {
+  const [, forceUpdate] = React.useState(0);
 
-  if (!context) {
-    throw new Error("useDashboardUI must be used inside DashboardUIProvider.");
-  }
+  React.useEffect(() => {
+    return subscribe(() => {
+      forceUpdate((value: number) => value + 1);
+    });
+  }, []);
 
-  return context;
+  return getUiValue();
 }

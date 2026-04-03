@@ -1,10 +1,13 @@
-import type { InputHTMLAttributes } from "react";
 import { cn } from "@/lib/dashboard/utils";
+
+type InputProps = {
+  className?: string;
+} & Record<string, any>;
 
 export function Input({
   className,
   ...props
-}: InputHTMLAttributes<HTMLInputElement>) {
+}: InputProps) {
   return (
     <input
       className={cn(

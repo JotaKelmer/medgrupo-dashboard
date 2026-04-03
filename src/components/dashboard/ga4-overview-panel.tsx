@@ -160,7 +160,7 @@ function calculateDeltaPct(current: number, base: number | null) {
 function calculateStatus(
   current: number | null,
   historicalAverage: number | null,
-  higherIsBetter = true,
+  higherIsBetter = true
 ): Ga4TrendStatus {
   if (current === null || historicalAverage === null || historicalAverage === 0) {
     return "neutral";
@@ -194,7 +194,7 @@ type MetricCardRow = {
 
 function buildCtrMetric(
   label: string,
-  benchmark?: DashboardMediaBenchmarks["googleAds"],
+  benchmark?: DashboardMediaBenchmarks["googleAds"]
 ): MetricCardRow | null {
   if (!benchmark) return null;
 
@@ -205,7 +205,7 @@ function buildCtrMetric(
     status: calculateStatus(
       benchmark.current.ctr,
       benchmark.historicalAverage?.ctr ?? null,
-      true,
+      true
     ),
     formattedValue: formatPercent(benchmark.current.ctr),
     formattedHistoricalAverage:
@@ -218,7 +218,7 @@ function buildCtrMetric(
 
 function buildCpaMetric(
   label: string,
-  benchmark?: DashboardMediaBenchmarks["googleAds"],
+  benchmark?: DashboardMediaBenchmarks["googleAds"]
 ): MetricCardRow | null {
   if (!benchmark || benchmark.current.cpa === null) return null;
 
@@ -229,7 +229,7 @@ function buildCpaMetric(
     status: calculateStatus(
       benchmark.current.cpa,
       benchmark.historicalAverage?.cpa ?? null,
-      false,
+      false
     ),
     formattedValue: formatCurrency(benchmark.current.cpa),
     formattedHistoricalAverage:
@@ -242,7 +242,7 @@ function buildCpaMetric(
 
 function buildConversionMetric(
   label: string,
-  benchmark?: DashboardMediaBenchmarks["googleAds"],
+  benchmark?: DashboardMediaBenchmarks["googleAds"]
 ): MetricCardRow | null {
   if (!benchmark) return null;
 
@@ -253,7 +253,7 @@ function buildConversionMetric(
     status: calculateStatus(
       benchmark.current.conversionRate,
       benchmark.historicalAverage?.conversionRate ?? null,
-      true,
+      true
     ),
     formattedValue: formatPercent(benchmark.current.conversionRate),
     formattedHistoricalAverage:
@@ -302,7 +302,7 @@ function Semaforo({ status }: { status: Ga4TrendStatus }) {
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
-        getStatusClasses(status),
+        getStatusClasses(status)
       )}
     >
       {getStatusLabel(status)}
@@ -357,47 +357,6 @@ function HeroCard({
   );
 }
 
-function ShareCard({ item }: { item: Ga4SiteShareCard }) {
-  return (
-    <Card className="space-y-4">
-      <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-white/45">
-          {item.source}
-        </p>
-        <p className="mt-3 text-3xl font-semibold text-[var(--color-lime)]">
-          {formatPercent(item.sharePct)}
-        </p>
-        <p className="mt-1 text-sm text-white/55">participação no site</p>
-      </div>
-
-      <div className="rounded-2xl bg-white/[0.04] p-3 text-xs text-white/50">
-        anterior: {formatPercent(item.previousSharePct)}
-      </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-2xl bg-white/[0.04] p-3">
-          <p className="text-xs text-white/45">Visitas</p>
-          <p className="mt-1 text-sm font-semibold text-white">
-            {formatNumber(item.sessions)}
-          </p>
-        </div>
-        <div className="rounded-2xl bg-white/[0.04] p-3">
-          <p className="text-xs text-white/45">Usuários</p>
-          <p className="mt-1 text-sm font-semibold text-white">
-            {formatNumber(item.totalUsers)}
-          </p>
-        </div>
-        <div className="rounded-2xl bg-white/[0.04] p-3">
-          <p className="text-xs text-white/45">Inscrições</p>
-          <p className="mt-1 text-sm font-semibold text-white">
-            {formatNumber(item.signups)}
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 function IndicatorShell({
   title,
   subtitle,
@@ -415,27 +374,6 @@ function IndicatorShell({
       </div>
       {children}
     </Card>
-  );
-}
-
-function MetricRow({ item }: { item: MetricCardRow }) {
-  return (
-    <div className="rounded-2xl bg-white/[0.04] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-white">{item.label}</p>
-          <p className="mt-1 text-2xl font-semibold text-[var(--color-lime)]">
-            {item.formattedValue}
-          </p>
-        </div>
-
-        <Semaforo status={item.status} />
-      </div>
-
-      <p className="mt-3 text-xs text-white/45">
-        Média histórica: {item.formattedHistoricalAverage}
-      </p>
-    </div>
   );
 }
 
@@ -466,7 +404,7 @@ export function Ga4OverviewPanel({
         compareEndDate,
         historyCycles,
       }),
-    [startDate, endDate, compareStartDate, compareEndDate, historyCycles],
+    [startDate, endDate, compareStartDate, compareEndDate, historyCycles]
   );
 
   const [state, setState] = useState<State>({
@@ -500,7 +438,7 @@ export function Ga4OverviewPanel({
           throw new Error(
             "error" in payload && payload.error
               ? payload.error
-              : "Não foi possível carregar o GA4.",
+              : "Não foi possível carregar o GA4."
           );
         }
 
@@ -609,7 +547,42 @@ export function Ga4OverviewPanel({
 
             <div className="grid gap-4 lg:grid-cols-3">
               {data.siteShare.map((item) => (
-                <ShareCard key={item.source} item={item} />
+                <Card key={item.source} className="space-y-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-white/45">
+                      {item.source}
+                    </p>
+                    <p className="mt-3 text-3xl font-semibold text-[var(--color-lime)]">
+                      {formatPercent(item.sharePct)}
+                    </p>
+                    <p className="mt-1 text-sm text-white/55">participação no site</p>
+                  </div>
+
+                  <div className="rounded-2xl bg-white/[0.04] p-3 text-xs text-white/50">
+                    anterior: {formatPercent(item.previousSharePct)}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-2xl bg-white/[0.04] p-3">
+                      <p className="text-xs text-white/45">Visitas</p>
+                      <p className="mt-1 text-sm font-semibold text-white">
+                        {formatNumber(item.sessions)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-white/[0.04] p-3">
+                      <p className="text-xs text-white/45">Usuários</p>
+                      <p className="mt-1 text-sm font-semibold text-white">
+                        {formatNumber(item.totalUsers)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-white/[0.04] p-3">
+                      <p className="text-xs text-white/45">Inscrições</p>
+                      <p className="mt-1 text-sm font-semibold text-white">
+                        {formatNumber(item.signups)}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
               ))}
             </div>
           </div>
@@ -622,7 +595,22 @@ export function Ga4OverviewPanel({
               {ctrRows.length ? (
                 <div className="space-y-3">
                   {ctrRows.map((row) => (
-                    <MetricRow key={row.label} item={row} />
+                    <div key={row.label} className="rounded-2xl bg-white/[0.04] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-white">{row.label}</p>
+                          <p className="mt-1 text-2xl font-semibold text-[var(--color-lime)]">
+                            {row.formattedValue}
+                          </p>
+                        </div>
+
+                        <Semaforo status={row.status} />
+                      </div>
+
+                      <p className="mt-3 text-xs text-white/45">
+                        Média histórica: {row.formattedHistoricalAverage}
+                      </p>
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -637,7 +625,22 @@ export function Ga4OverviewPanel({
               {cpaRows.length ? (
                 <div className="space-y-3">
                   {cpaRows.map((row) => (
-                    <MetricRow key={row.label} item={row} />
+                    <div key={row.label} className="rounded-2xl bg-white/[0.04] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-white">{row.label}</p>
+                          <p className="mt-1 text-2xl font-semibold text-[var(--color-lime)]">
+                            {row.formattedValue}
+                          </p>
+                        </div>
+
+                        <Semaforo status={row.status} />
+                      </div>
+
+                      <p className="mt-3 text-xs text-white/45">
+                        Média histórica: {row.formattedHistoricalAverage}
+                      </p>
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -690,7 +693,22 @@ export function Ga4OverviewPanel({
               {conversionRows.length ? (
                 <div className="space-y-3">
                   {conversionRows.map((row) => (
-                    <MetricRow key={row.label} item={row} />
+                    <div key={row.label} className="rounded-2xl bg-white/[0.04] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-white">{row.label}</p>
+                          <p className="mt-1 text-2xl font-semibold text-[var(--color-lime)]">
+                            {row.formattedValue}
+                          </p>
+                        </div>
+
+                        <Semaforo status={row.status} />
+                      </div>
+
+                      <p className="mt-3 text-xs text-white/45">
+                        Média histórica: {row.formattedHistoricalAverage}
+                      </p>
+                    </div>
                   ))}
                 </div>
               ) : null}

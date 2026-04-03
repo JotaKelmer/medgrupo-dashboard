@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Dashboard MEDGRUPO",
-  description: "Dashboard executivo, operacional e preditivo para mídia paga."
+  title: "Medgrupo Dashboard",
+  description: "Dashboard de mídia e performance do Medgrupo",
 };
 
 export default function RootLayout({
-  children
-}: Readonly<{
-  children: ReactNode;
-}>) {
+  children,
+}: {
+  children: any;
+}) {
   return (
     <html lang="pt-BR">
-      <body className="antialiased">{children}</body>
+      <body>{children}</body>
     </html>
   );
 }

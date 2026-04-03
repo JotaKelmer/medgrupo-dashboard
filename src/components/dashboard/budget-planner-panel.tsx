@@ -1,13 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { buildBudgetEstimates, normalizeChannels, normalizeObjectives } from "@/lib/dashboard/calculations";
+import {
+  buildBudgetEstimates,
+  normalizeChannels,
+  normalizeObjectives,
+} from "@/lib/dashboard/calculations";
 import type {
   BenchmarkValues,
   BudgetComparisonRow,
   BudgetPlannerState,
-  ObjectiveDistributionState,
-  PlatformType
+  PlatformType,
 } from "@/lib/dashboard/types";
 import { formatCompact, formatCurrency } from "@/lib/dashboard/utils";
 import { PLATFORM_LABELS } from "@/lib/dashboard/constants";
@@ -20,21 +23,25 @@ type BudgetPlannerPanelProps = {
   comparison: BudgetComparisonRow[];
 };
 
-function rehydratePlan(state: BudgetPlannerState) {
+function rehydratePlan(state: BudgetPlannerState): BudgetPlannerState {
   const channels = normalizeChannels(state.totalBudget, state.channels);
-  const objectives = normalizeObjectives(state.periodDays, channels, state.objectives);
+  const objectives = normalizeObjectives(
+    state.periodDays,
+    channels,
+    state.objectives
+  );
   const estimates = buildBudgetEstimates({
     totalBudget: state.totalBudget,
     periodDays: state.periodDays,
     channels,
-    benchmarks: state.benchmarks
+    benchmarks: state.benchmarks,
   });
 
   return {
     ...state,
     channels,
     objectives,
-    estimates
+    estimates,
   };
 }
 
@@ -48,15 +55,35 @@ function updateBenchmark(
     ...benchmarks,
     [platform]: {
       ...benchmarks[platform],
-      [key]: value
-    }
+      [key]: value,
+    },
   };
 }
 
-export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPanelProps) {
-  const [state, setState] = useState<BudgetPlannerState>(() => rehydratePlan(initialState));
+function MetricChip({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3">
+      <p className="text-xs uppercase tracking-[0.12em] text-white/45">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+export function BudgetPlannerPanel({
+  initialState,
+  comparison,
+}: BudgetPlannerPanelProps) {
+  const [state, setState] = useState<BudgetPlannerState>(
+    rehydratePlan(initialState)
+  );
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string>("");
+  const [message, setMessage] = useState("");
 
   const comparisonMap = useMemo(
     () => new Map(comparison.map((item) => [item.platform, item])),
@@ -64,14 +91,19 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
   );
 
   function applyPatch(patch: Partial<BudgetPlannerState>) {
-    setState((current) => rehydratePlan({ ...current, ...patch }));
+    setState((current) =>
+      rehydratePlan({
+        ...current,
+        ...patch,
+      } as BudgetPlannerState)
+    );
   }
 
   function updateChannel(platform: PlatformType, percentage: number) {
     applyPatch({
       channels: state.channels.map((channel) =>
         channel.platform === platform ? { ...channel, percentage } : channel
-      )
+      ),
     });
   }
 
@@ -79,13 +111,17 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
     applyPatch({
       objectives: state.objectives.map((objective) =>
         objective.id === id ? { ...objective, percentage } : objective
-      )
+      ),
     });
   }
 
-  function updateBenchmarks(platform: PlatformType, key: keyof BenchmarkValues, value: number) {
+  function updateBenchmarks(
+    platform: PlatformType,
+    key: keyof BenchmarkValues,
+    value: number
+  ) {
     applyPatch({
-      benchmarks: updateBenchmark(state.benchmarks, platform, key, value)
+      benchmarks: updateBenchmark(state.benchmarks, platform, key, value),
     });
   }
 
@@ -97,9 +133,9 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
       const response = await fetch("/api/budget-plans", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(state)
+        body: JSON.stringify(state),
       });
 
       if (!response.ok) {
@@ -107,7 +143,10 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
       }
 
       const payload = await response.json();
-      setState((current) => ({ ...current, id: payload.id ?? current.id }));
+      setState((current) => ({
+        ...current,
+        id: payload.id ?? current.id,
+      }));
       setMessage("Plano salvo com sucesso.");
     } catch (error) {
       console.error(error);
@@ -122,8 +161,12 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)]">
         <Card className="space-y-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-white/45">Entrada de orçamento</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">Defina verba, período e pesos por canal</h2>
+            <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+              Entrada de orçamento
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-white">
+              Defina verba, período e pesos por canal
+            </h2>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -133,9 +176,12 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
               </label>
               <Input
                 value={state.name}
-                onChange={(event) => applyPatch({ name: event.target.value })}
+                onChange={(event: any) =>
+                  applyPatch({ name: event.target.value })
+                }
               />
             </div>
+
             <div>
               <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">
                 Orçamento total
@@ -143,9 +189,12 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
               <Input
                 type="number"
                 value={state.totalBudget}
-                onChange={(event) => applyPatch({ totalBudget: Number(event.target.value || 0) })}
+                onChange={(event: any) =>
+                  applyPatch({ totalBudget: Number(event.target.value || 0) })
+                }
               />
             </div>
+
             <div>
               <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">
                 Período (dias)
@@ -154,34 +203,50 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
                 type="number"
                 min={1}
                 value={state.periodDays}
-                onChange={(event) => applyPatch({ periodDays: Number(event.target.value || 1) })}
+                onChange={(event: any) =>
+                  applyPatch({ periodDays: Number(event.target.value || 1) })
+                }
               />
             </div>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             {state.channels.map((channel) => (
-              <div key={channel.platform} className="rounded-3xl border border-white/8 bg-white/4 p-4">
+              <div
+                key={channel.platform}
+                className="rounded-3xl border border-white/8 bg-white/4 p-4"
+              >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-white">{PLATFORM_LABELS[channel.platform]}</p>
-                    <p className="text-xs text-white/45">Distribuição do orçamento total</p>
+                    <p className="text-sm font-semibold text-white">
+                      {PLATFORM_LABELS[channel.platform]}
+                    </p>
+                    <p className="text-xs text-white/45">
+                      Distribuição do orçamento total
+                    </p>
                   </div>
+
                   <p className="text-lg font-semibold text-[var(--color-lime)]">
                     {formatCurrency(channel.amount)}
                   </p>
                 </div>
+
                 <div className="mt-4">
                   <Input
                     type="number"
                     min={0}
                     max={100}
                     value={channel.percentage}
-                    onChange={(event) =>
-                      updateChannel(channel.platform, Number(event.target.value || 0))
+                    onChange={(event: any) =>
+                      updateChannel(
+                        channel.platform,
+                        Number(event.target.value || 0)
+                      )
                     }
                   />
-                  <p className="mt-2 text-xs text-white/45">{channel.percentage}% do plano</p>
+                  <p className="mt-2 text-xs text-white/45">
+                    {channel.percentage}% do plano
+                  </p>
                 </div>
               </div>
             ))}
@@ -197,24 +262,37 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
 
         <Card className="space-y-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-white/45">Benchmarks</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">Premissas por plataforma</h2>
+            <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+              Benchmarks
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-white">
+              Premissas por plataforma
+            </h2>
           </div>
 
           {(["meta", "google"] as PlatformType[]).map((platform) => (
-            <div key={platform} className="rounded-3xl border border-white/8 bg-white/4 p-4">
-              <p className="mb-3 text-sm font-semibold text-white">{PLATFORM_LABELS[platform]}</p>
+            <div
+              key={platform}
+              className="rounded-3xl border border-white/8 bg-white/4 p-4"
+            >
+              <p className="mb-3 text-sm font-semibold text-white">
+                {PLATFORM_LABELS[platform]}
+              </p>
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs uppercase tracking-[0.14em] text-white/45">CPM</label>
+                  <label className="mb-1 block text-xs uppercase tracking-[0.14em] text-white/45">
+                    CPM
+                  </label>
                   <Input
                     type="number"
                     value={state.benchmarks[platform].cpm}
-                    onChange={(event) =>
+                    onChange={(event: any) =>
                       updateBenchmarks(platform, "cpm", Number(event.target.value || 0))
                     }
                   />
                 </div>
+
                 <div>
                   <label className="mb-1 block text-xs uppercase tracking-[0.14em] text-white/45">
                     Custo / Visita
@@ -222,11 +300,16 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
                   <Input
                     type="number"
                     value={state.benchmarks[platform].costPerVisit}
-                    onChange={(event) =>
-                      updateBenchmarks(platform, "costPerVisit", Number(event.target.value || 0))
+                    onChange={(event: any) =>
+                      updateBenchmarks(
+                        platform,
+                        "costPerVisit",
+                        Number(event.target.value || 0)
+                      )
                     }
                   />
                 </div>
+
                 <div>
                   <label className="mb-1 block text-xs uppercase tracking-[0.14em] text-white/45">
                     Custo / Engajamento
@@ -234,11 +317,16 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
                   <Input
                     type="number"
                     value={state.benchmarks[platform].costPerEngagement}
-                    onChange={(event) =>
-                      updateBenchmarks(platform, "costPerEngagement", Number(event.target.value || 0))
+                    onChange={(event: any) =>
+                      updateBenchmarks(
+                        platform,
+                        "costPerEngagement",
+                        Number(event.target.value || 0)
+                      )
                     }
                   />
                 </div>
+
                 <div>
                   <label className="mb-1 block text-xs uppercase tracking-[0.14em] text-white/45">
                     Custo / Lead
@@ -246,11 +334,16 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
                   <Input
                     type="number"
                     value={state.benchmarks[platform].costPerLead}
-                    onChange={(event) =>
-                      updateBenchmarks(platform, "costPerLead", Number(event.target.value || 0))
+                    onChange={(event: any) =>
+                      updateBenchmarks(
+                        platform,
+                        "costPerLead",
+                        Number(event.target.value || 0)
+                      )
                     }
                   />
                 </div>
+
                 <div className="sm:col-span-2">
                   <label className="mb-1 block text-xs uppercase tracking-[0.14em] text-white/45">
                     Custo / Venda
@@ -258,8 +351,12 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
                   <Input
                     type="number"
                     value={state.benchmarks[platform].costPerSale}
-                    onChange={(event) =>
-                      updateBenchmarks(platform, "costPerSale", Number(event.target.value || 0))
+                    onChange={(event: any) =>
+                      updateBenchmarks(
+                        platform,
+                        "costPerSale",
+                        Number(event.target.value || 0)
+                      )
                     }
                   />
                 </div>
@@ -271,21 +368,32 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
 
       <div className="grid gap-5 2xl:grid-cols-2">
         {(["meta", "google"] as PlatformType[]).map((platform) => {
-          const platformObjectives = state.objectives.filter((item) => item.platform === platform);
+          const platformObjectives = state.objectives.filter(
+            (item) => item.platform === platform
+          );
           const platformEstimates = state.estimates[platform];
           const channel = state.channels.find((item) => item.platform === platform);
           const realized = comparisonMap.get(platform);
-          const plannedLeadMetric = platformEstimates.find((metric) => metric.metricKey === "leads");
+          const plannedLeadMetric = platformEstimates.find(
+            (metric: any) => metric.metricKey === "leads"
+          );
 
           return (
             <Card key={platform} className="space-y-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-white/45">Planejamento</p>
-                  <h2 className="mt-2 text-xl font-semibold text-white">{PLATFORM_LABELS[platform]}</h2>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                    Planejamento
+                  </p>
+                  <h2 className="mt-2 text-xl font-semibold text-white">
+                    {PLATFORM_LABELS[platform]}
+                  </h2>
                 </div>
+
                 <div className="text-right">
-                  <p className="text-xs uppercase tracking-[0.16em] text-white/45">Verba do canal</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-white/45">
+                    Verba do canal
+                  </p>
                   <p className="mt-1 text-2xl font-semibold text-[var(--color-lime)]">
                     {formatCurrency(channel?.amount ?? 0)}
                   </p>
@@ -294,22 +402,66 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
 
               <div className="space-y-3">
                 {platformObjectives.map((objective) => (
-                  <ObjectiveRow
+                  <div
                     key={objective.id}
-                    objective={objective}
-                    onChange={(value) => updateObjective(objective.id, value)}
-                  />
+                    className="grid gap-3 rounded-2xl border border-white/8 bg-white/4 p-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(160px,0.7fr)_minmax(140px,0.8fr)_minmax(140px,0.8fr)]"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-white">
+                        {objective.objective}
+                      </p>
+                      <p className="text-xs text-white/45">
+                        Distribuição dentro do canal
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs uppercase tracking-[0.12em] text-white/45">
+                        %
+                      </label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={objective.percentage}
+                        onChange={(event: any) =>
+                          updateObjective(
+                            objective.id,
+                            Number(event.target.value || 0)
+                          )
+                        }
+                      />
+                    </div>
+
+                    <MetricChip
+                      label="Diário"
+                      value={formatCurrency(objective.dailyBudget)}
+                    />
+                    <MetricChip
+                      label="Total"
+                      value={formatCurrency(objective.totalBudget)}
+                    />
+                  </div>
                 ))}
               </div>
 
               <div className="rounded-3xl border border-white/8 bg-white/4 p-4">
                 <p className="text-sm font-semibold text-white">Estimativas do canal</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {platformEstimates.map((metric) => (
-                    <div key={metric.metricKey} className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3">
-                      <p className="text-xs uppercase tracking-[0.14em] text-white/45">{metric.metricLabel}</p>
-                      <p className="mt-1 text-lg font-semibold text-white">{formatCompact(metric.totalResult)}</p>
-                      <p className="text-xs text-white/45">diário: {formatCompact(metric.dailyResult)}</p>
+                  {platformEstimates.map((metric: any) => (
+                    <div
+                      key={metric.metricKey}
+                      className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3"
+                    >
+                      <p className="text-xs uppercase tracking-[0.14em] text-white/45">
+                        {metric.metricLabel}
+                      </p>
+                      <p className="mt-1 text-lg font-semibold text-white">
+                        {formatCompact(metric.totalResult)}
+                      </p>
+                      <p className="text-xs text-white/45">
+                        diário: {formatCompact(metric.dailyResult)}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -318,48 +470,28 @@ export function BudgetPlannerPanel({ initialState, comparison }: BudgetPlannerPa
               <div className="rounded-3xl border border-white/8 bg-white/4 p-4">
                 <p className="text-sm font-semibold text-white">Planejado vs realizado</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <MetricChip label="Planejado" value={formatCurrency(channel?.amount ?? 0)} />
-                  <MetricChip label="Realizado" value={formatCurrency(realized?.realizedBudget ?? 0)} />
-                  <MetricChip label="Leads previstos" value={formatCompact(plannedLeadMetric?.totalResult ?? 0)} />
-                  <MetricChip label="Resultados reais" value={formatCompact(realized?.realizedResults ?? 0)} />
+                  <MetricChip
+                    label="Planejado"
+                    value={formatCurrency(channel?.amount ?? 0)}
+                  />
+                  <MetricChip
+                    label="Realizado"
+                    value={formatCurrency(realized?.realizedBudget ?? 0)}
+                  />
+                  <MetricChip
+                    label="Leads previstos"
+                    value={formatCompact(plannedLeadMetric?.totalResult ?? 0)}
+                  />
+                  <MetricChip
+                    label="Resultados reais"
+                    value={formatCompact(realized?.realizedResults ?? 0)}
+                  />
                 </div>
               </div>
             </Card>
           );
         })}
       </div>
-    </div>
-  );
-}
-
-function ObjectiveRow({
-  objective,
-  onChange
-}: {
-  objective: ObjectiveDistributionState;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className="grid gap-3 rounded-2xl border border-white/8 bg-white/4 p-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(160px,0.7fr)_minmax(140px,0.8fr)_minmax(140px,0.8fr)]">
-      <div>
-        <p className="text-sm font-medium text-white">{objective.objective}</p>
-        <p className="text-xs text-white/45">Distribuição dentro do canal</p>
-      </div>
-      <div>
-        <label className="mb-1 block text-xs uppercase tracking-[0.12em] text-white/45">%</label>
-        <Input type="number" min={0} max={100} value={objective.percentage} onChange={(event) => onChange(Number(event.target.value || 0))} />
-      </div>
-      <MetricChip label="Diário" value={formatCurrency(objective.dailyBudget)} />
-      <MetricChip label="Total" value={formatCurrency(objective.totalBudget)} />
-    </div>
-  );
-}
-
-function MetricChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3">
-      <p className="text-xs uppercase tracking-[0.12em] text-white/45">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-white">{value}</p>
     </div>
   );
 }

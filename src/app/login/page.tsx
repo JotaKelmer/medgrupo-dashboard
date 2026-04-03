@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Funnel_Display } from "next/font/google";
@@ -22,7 +22,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: any) {
     event.preventDefault();
     setLoading(true);
     setError("");
@@ -48,16 +48,12 @@ export default function LoginPage() {
       className={`${funnelDisplay.className} flex min-h-screen items-center justify-center px-4 py-8 text-white sm:px-6`}
     >
       <div className="relative grid w-full max-w-[1120px] overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl lg:grid-cols-2">
+        <span className="absolute left-0 top-0 h-1 w-full bg-[#0465cd]" />
+        <span className="absolute bottom-0 left-0 h-1 w-[35%] bg-[linear-gradient(90deg,#38e038_0%,#0465cd_100%)]" />
+        <span className="absolute right-0 top-0 hidden h-full w-1 bg-[#0465cd] lg:block" />
 
-        {/* GRADIENTES REVLABS (isolado no login) */}
-        <span className="absolute top-0 left-0 w-full h-1 bg-[#0465cd]" />
-        <span className="absolute bottom-0 left-0 w-[35%] h-1 bg-[linear-gradient(90deg,#38e038_0%,#0465cd_100%)]" />
-        <span className="absolute top-0 right-0 w-1 h-full bg-[#0465cd] hidden lg:block" />
-
-        {/* ESQUERDA */}
         <section className="hidden flex-col justify-between bg-[radial-gradient(circle_at_top_left,_rgba(4,101,205,0.25),_transparent_35%),linear-gradient(180deg,_rgba(5,10,30,0.98),_rgba(4,8,24,0.98))] p-10 lg:flex">
           <div>
-            {/* LOGO PADRONIZADA */}
             <div className="mb-10 flex h-14 w-44 items-center rounded-xl border border-white/10 px-4">
               <div className="relative h-7 w-full">
                 <Image
@@ -70,14 +66,12 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* REMOVIDO BADGE AQUI */}
-
             <h1 className="mt-6 text-4xl font-semibold leading-tight">
               Dados claros para decisões rápidas.
             </h1>
 
             <p className="mt-4 max-w-xl text-sm leading-6 text-white/70">
-              Plataforma inteligente para acompanhar mídia, performance e operação com clareza, 
+              Plataforma inteligente para acompanhar mídia, performance e operação com clareza,
               reunindo indicadores, investimentos, funis, criativos e dados em um único painel.
             </p>
           </div>
@@ -99,11 +93,8 @@ export default function LoginPage() {
           </div>
         </section>
 
-        {/* DIREITA */}
         <section className="p-6 sm:p-10 lg:p-12">
           <div className="mx-auto w-full max-w-md">
-
-            {/* MOBILE */}
             <div className="mb-8 lg:hidden">
               <div className="flex h-14 w-44 items-center rounded-xl border border-white/10 px-4">
                 <div className="relative h-7 w-full">
@@ -118,7 +109,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* LOGO MEDGRUPO PADRONIZADA */}
             <div className="mb-8">
               <div className="mb-4 flex h-14 w-44 items-center rounded-xl border border-white/10 px-4">
                 <div className="relative h-7 w-full">
@@ -146,7 +136,7 @@ export default function LoginPage() {
                 <input
                   type="email"
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event: any) => setEmail(event.target.value)}
                   placeholder="seuemail@empresa.com.br"
                   className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm outline-none transition focus:border-[#0465cd]"
                   required
@@ -160,7 +150,7 @@ export default function LoginPage() {
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    onChange={(event: any) => setPassword(event.target.value)}
                     placeholder="Digite sua senha"
                     className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 pr-16 text-sm outline-none transition focus:border-[#0465cd]"
                     required
@@ -182,7 +172,6 @@ export default function LoginPage() {
                 </div>
               ) : null}
 
-              {/* BOTÃO COM GRADIENTE REVLABS */}
               <button
                 type="submit"
                 disabled={loading}
@@ -196,4 +185,4 @@ export default function LoginPage() {
       </div>
     </main>
   );
-}
+} 

@@ -1,23 +1,13 @@
-import { redirect } from "next/navigation";
-import { DashboardShell } from "@/components/dashboard/layout/dashboard-shell";
-import { createClient } from "@/lib/supabase/server";
+import type { Metadata } from "next";
 
-type DashboardLayoutProps = {
-  children: any;
+export const metadata: Metadata = {
+  title: "Medgrupo Dashboard",
 };
 
-export default async function DashboardLayout({
+export default function DashboardLayout({
   children,
-}: DashboardLayoutProps) {
-  const supabase = await createClient();
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    redirect("/login");
-  }
-
-  return <DashboardShell>{children}</DashboardShell>;
+}: {
+  children: any;
+}) {
+  return <>{children}</>;
 }

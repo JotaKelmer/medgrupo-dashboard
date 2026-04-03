@@ -12,7 +12,6 @@ class BadRequestError extends Error {}
 
 const DEFAULT_HISTORY_CYCLES = 6;
 const MAX_HISTORY_CYCLES = 12;
-const MILLIS_PER_DAY = 86_400_000;
 
 function pad2(value: number) {
   return String(value).padStart(2, '0');
@@ -23,23 +22,26 @@ function isIsoDate(value: string) {
 }
 
 function toIsoDate(date: Date) {
-  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(
+    date.getUTCDate(),
+  )}`;
 }
 
-function isMissingDateValue(value: string | null | undefined) {
-  if (value == null) return true;
+function normalizeDateString(raw: string, label: string): string {
+  const trimmed = raw.trim();
 
-  const normalized = value.trim().toLowerCase();
+  if (!trimmed) {
+    throw new BadRequestError(
+      `[GA4] O parâmetro ${label} precisa estar no formato YYYY-MM-DD.`,
+    );
+  }
 
-  return (
-    normalized === '' ||
-    normalized === 'undefined' ||
-    normalized === 'null'
-  );
-}
-
-function normalizeDateString(value: string, label: string) {
-  const trimmed = value.trim();
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'undefined' || lowered === 'null') {
+    throw new BadRequestError(
+      `[GA4] O parâmetro ${label} precisa estar no formato YYYY-MM-DD.`,
+    );
+  }
 
   if (isIsoDate(trimmed)) {
     return trimmed;
@@ -90,13 +92,6 @@ function parseIsoDate(value: string, label: string) {
   return parsedDate;
 }
 
-function normalizeRange(range: Ga4DateRange, label: string): Ga4DateRange {
-  const startDate = normalizeDateString(range.startDate, `${label}.startDate`);
-  const endDate = normalizeDateString(range.endDate, `${label}.endDate`);
-
-  return { startDate, endDate };
-}
-
 function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setUTCDate(next.getUTCDate() + days);
@@ -106,7 +101,9 @@ function addDays(date: Date, days: number) {
 function getTodayUtc() {
   const now = new Date();
 
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
 }
 
 function getDefaultCurrentRange(): Ga4DateRange {
@@ -120,17 +117,23 @@ function getDefaultCurrentRange(): Ga4DateRange {
 }
 
 function getInclusiveDaySpan(range: Ga4DateRange) {
-  const normalizedRange = normalizeRange(range, 'currentRange');
-  const start = parseIsoDate(normalizedRange.startDate, 'currentRange.startDate').getTime();
-  const end = parseIsoDate(normalizedRange.endDate, 'currentRange.endDate').getTime();
+  const start = parseIsoDate(range.startDate, 'startDate').getTime();
+  const end = parseIsoDate(range.endDate, 'endDate').getTime();
   const diffMs = end - start;
 
-  return Math.floor(diffMs / MILLIS_PER_DAY) + 1;
+  return Math.floor(diffMs / 86_400_000) + 1;
 }
 
 function validateRange(range: Ga4DateRange, label: string): Ga4DateRange {
-  const normalizedRange = normalizeRange(range, label);
-  const start = parseIsoDate(normalizedRange.startDate, `${label}.startDate`);
+  const normalizedRange = {
+    startDate: normalizeDateString(range.startDate, `${label}.startDate`),
+    endDate: normalizeDateString(range.endDate, `${label}.endDate`),
+  };
+
+  const start = parseIsoDate(
+    normalizedRange.startDate,
+    `${label}.startDate`,
+  );
   const end = parseIsoDate(normalizedRange.endDate, `${label}.endDate`);
 
   if (start.getTime() > end.getTime()) {
@@ -142,40 +145,44 @@ function validateRange(range: Ga4DateRange, label: string): Ga4DateRange {
   return normalizedRange;
 }
 
-function readOptionalDateParam(
+function getOptionalDateParam(
   searchParams: URLSearchParams,
   key: string,
   label: string,
-) {
+): string | null {
   const raw = searchParams.get(key);
 
-  if (isMissingDateValue(raw)) {
+  if (raw == null) {
     return null;
   }
 
-  return normalizeDateString(raw, label);
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'undefined' || lowered === 'null') {
+    return null;
+  }
+
+  return normalizeDateString(trimmed, label);
 }
 
 function resolveCurrentRange(searchParams: URLSearchParams): Ga4DateRange {
-  const startDate = readOptionalDateParam(
+  const startDate = getOptionalDateParam(
     searchParams,
     'startDate',
     'currentRange.startDate',
   );
-  const endDate = readOptionalDateParam(
+  const endDate = getOptionalDateParam(
     searchParams,
     'endDate',
     'currentRange.endDate',
   );
 
-  if (!startDate && !endDate) {
-    return getDefaultCurrentRange();
-  }
-
   if (!startDate || !endDate) {
-    throw new BadRequestError(
-      '[GA4] startDate e endDate precisam ser enviados juntos.',
-    );
+    return getDefaultCurrentRange();
   }
 
   return validateRange({ startDate, endDate }, 'currentRange');
@@ -185,19 +192,22 @@ function resolvePreviousRange(
   currentRange: Ga4DateRange,
   searchParams: URLSearchParams,
 ): Ga4DateRange {
-  const compareStartDate = readOptionalDateParam(
+  const compareStartDate = getOptionalDateParam(
     searchParams,
     'compareStartDate',
     'previousRange.startDate',
   );
-  const compareEndDate = readOptionalDateParam(
+  const compareEndDate = getOptionalDateParam(
     searchParams,
     'compareEndDate',
     'previousRange.endDate',
   );
 
   if (!compareStartDate && !compareEndDate) {
-    const currentStart = parseIsoDate(currentRange.startDate, 'currentRange.startDate');
+    const currentStart = parseIsoDate(
+      currentRange.startDate,
+      'currentRange.startDate',
+    );
     const daySpan = getInclusiveDaySpan(currentRange);
 
     const previousEnd = addDays(currentStart, -1);
@@ -227,12 +237,22 @@ function resolvePreviousRange(
 function resolveHistoryCycles(searchParams: URLSearchParams) {
   const raw = searchParams.get('historyCycles');
 
-  if (isMissingDateValue(raw)) return DEFAULT_HISTORY_CYCLES;
+  if (raw == null) return DEFAULT_HISTORY_CYCLES;
 
-  const parsed = Number(raw);
+  const trimmed = raw.trim();
+  if (!trimmed) return DEFAULT_HISTORY_CYCLES;
+
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'undefined' || lowered === 'null') {
+    return DEFAULT_HISTORY_CYCLES;
+  }
+
+  const parsed = Number(trimmed);
 
   if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new BadRequestError('[GA4] historyCycles precisa ser um inteiro positivo.');
+    throw new BadRequestError(
+      '[GA4] historyCycles precisa ser um inteiro positivo.',
+    );
   }
 
   return Math.min(parsed, MAX_HISTORY_CYCLES);
@@ -240,7 +260,10 @@ function resolveHistoryCycles(searchParams: URLSearchParams) {
 
 function buildHistoricalRanges(currentRange: Ga4DateRange, cycles: number) {
   const daySpan = getInclusiveDaySpan(currentRange);
-  const currentStart = parseIsoDate(currentRange.startDate, 'currentRange.startDate');
+  const currentStart = parseIsoDate(
+    currentRange.startDate,
+    'currentRange.startDate',
+  );
 
   const ranges: Ga4DateRange[] = [];
   let windowEnd = addDays(currentStart, -1);

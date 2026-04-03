@@ -27,6 +27,17 @@ type FilterBarProps = {
   includeFunnel?: boolean;
 };
 
+type FilterState = {
+  workspaceId: string;
+  startDate: string;
+  endDate: string;
+  campaignId: string;
+  product: string;
+  campaignGroup: string;
+  platform: string;
+  funnelId?: string;
+};
+
 function normalizeBracketToken(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
@@ -38,7 +49,7 @@ function extractCampaignParts(name: string) {
 
   return {
     product: matches[0] ?? "",
-    campaignGroup: matches[1] ?? ""
+    campaignGroup: matches[1] ?? "",
   };
 }
 
@@ -49,21 +60,22 @@ export function FilterBar({
   campaignGroupOptions = [],
   funnelOptions = [],
   filters,
-  includeFunnel = false
+  includeFunnel = false,
 }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [state, setState] = useState({
+
+  const [state, setState] = useState<FilterState>({
     ...filters,
     product: filters.product ?? "",
-    campaignGroup: filters.campaignGroup ?? ""
+    campaignGroup: filters.campaignGroup ?? "",
   });
 
   useEffect(() => {
     setState({
       ...filters,
       product: filters.product ?? "",
-      campaignGroup: filters.campaignGroup ?? ""
+      campaignGroup: filters.campaignGroup ?? "",
     });
   }, [filters]);
 
@@ -105,14 +117,14 @@ export function FilterBar({
     ? campaignGroupOptions
     : fallbackCampaignGroupOptions;
 
-  function update(name: string, value: string) {
+  function update(name: keyof FilterState, value: string) {
     setState((current) => {
       if (name === "product") {
         return {
           ...current,
           product: value,
           campaignGroup: "",
-          campaignId: ""
+          campaignId: "",
         };
       }
 
@@ -120,7 +132,7 @@ export function FilterBar({
         return {
           ...current,
           campaignGroup: value,
-          campaignId: ""
+          campaignId: "",
         };
       }
 
@@ -155,7 +167,7 @@ export function FilterBar({
 
         <Select
           value={state.workspaceId}
-          onChange={(event) => update("workspaceId", event.target.value)}
+          onChange={(event: any) => update("workspaceId", event.target.value)}
         >
           {workspaceOptions.map((option) => (
             <option key={option.value} value={option.value}>
@@ -173,7 +185,7 @@ export function FilterBar({
         <Input
           type="date"
           value={state.startDate}
-          onChange={(event) => update("startDate", event.target.value)}
+          onChange={(event: any) => update("startDate", event.target.value)}
         />
       </div>
 
@@ -185,7 +197,7 @@ export function FilterBar({
         <Input
           type="date"
           value={state.endDate}
-          onChange={(event) => update("endDate", event.target.value)}
+          onChange={(event: any) => update("endDate", event.target.value)}
         />
       </div>
 
@@ -196,7 +208,7 @@ export function FilterBar({
 
         <Select
           value={state.product}
-          onChange={(event) => update("product", event.target.value)}
+          onChange={(event: any) => update("product", event.target.value)}
         >
           <option value="">Todos os produtos</option>
 
@@ -215,7 +227,7 @@ export function FilterBar({
 
         <Select
           value={state.campaignGroup}
-          onChange={(event) => update("campaignGroup", event.target.value)}
+          onChange={(event: any) => update("campaignGroup", event.target.value)}
         >
           <option value="">Todas as campanhas</option>
 
@@ -234,7 +246,7 @@ export function FilterBar({
 
         <Select
           value={state.platform}
-          onChange={(event) => update("platform", event.target.value)}
+          onChange={(event: any) => update("platform", event.target.value)}
         >
           <option value="all">Consolidado</option>
           <option value="meta">Meta Ads</option>
@@ -250,7 +262,7 @@ export function FilterBar({
 
           <Select
             value={state.funnelId ?? ""}
-            onChange={(event) => update("funnelId", event.target.value)}
+            onChange={(event: any) => update("funnelId", event.target.value)}
           >
             {funnelOptions.length ? null : <option value="">Funil padrão</option>}
 
