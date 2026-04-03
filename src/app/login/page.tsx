@@ -47,11 +47,19 @@ export default function LoginPage() {
     <main
       className={`${funnelDisplay.className} flex min-h-screen items-center justify-center px-4 py-8 text-white sm:px-6`}
     >
-      <div className="grid w-full max-w-[1120px] overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl lg:grid-cols-2">
-        <section className="hidden flex-col justify-between bg-[radial-gradient(circle_at_top_left,_rgba(54,92,255,0.28),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(0,224,255,0.14),_transparent_30%),linear-gradient(180deg,_rgba(8,14,34,0.98),_rgba(4,8,24,0.98))] p-10 lg:flex">
+      <div className="relative grid w-full max-w-[1120px] overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl lg:grid-cols-2">
+
+        {/* GRADIENTES REVLABS (isolado no login) */}
+        <span className="absolute top-0 left-0 w-full h-1 bg-[#0465cd]" />
+        <span className="absolute bottom-0 left-0 w-[35%] h-1 bg-[linear-gradient(90deg,#38e038_0%,#0465cd_100%)]" />
+        <span className="absolute top-0 right-0 w-1 h-full bg-[#0465cd] hidden lg:block" />
+
+        {/* ESQUERDA */}
+        <section className="hidden flex-col justify-between bg-[radial-gradient(circle_at_top_left,_rgba(4,101,205,0.25),_transparent_35%),linear-gradient(180deg,_rgba(5,10,30,0.98),_rgba(4,8,24,0.98))] p-10 lg:flex">
           <div>
-            <div className="mb-10 flex h-12 w-44 items-center rounded-xl border border-white/10 px-4">
-              <div className="relative h-8 w-full">
+            {/* LOGO PADRONIZADA */}
+            <div className="mb-10 flex h-14 w-44 items-center rounded-xl border border-white/10 px-4">
+              <div className="relative h-7 w-full">
                 <Image
                   src="/brands/revlabs-logo.png"
                   alt="Logo Rev.Labs"
@@ -62,18 +70,15 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <span className="inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-300">
-              Rev.Labs
-            </span>
+            {/* REMOVIDO BADGE AQUI */}
 
             <h1 className="mt-6 text-4xl font-semibold leading-tight">
-              Inteligência aplicada para acompanhar mídia, performance e operação
-              com mais clareza.
+              Dados claros para decisões rápidas.
             </h1>
 
             <p className="mt-4 max-w-xl text-sm leading-6 text-white/70">
-              Acesse a plataforma da Rev.Labs para visualizar indicadores,
-              investimento, funis, criativos e dados consolidados em um só lugar.
+              Plataforma inteligente para acompanhar mídia, performance e operação com clareza, 
+              reunindo indicadores, investimentos, funis, criativos e dados em um único painel.
             </p>
           </div>
 
@@ -94,11 +99,14 @@ export default function LoginPage() {
           </div>
         </section>
 
+        {/* DIREITA */}
         <section className="p-6 sm:p-10 lg:p-12">
           <div className="mx-auto w-full max-w-md">
+
+            {/* MOBILE */}
             <div className="mb-8 lg:hidden">
-              <div className="flex h-12 w-40 items-center rounded-xl border border-white/10 px-4">
-                <div className="relative h-8 w-full">
+              <div className="flex h-14 w-44 items-center rounded-xl border border-white/10 px-4">
+                <div className="relative h-7 w-full">
                   <Image
                     src="/brands/revlabs-logo.png"
                     alt="Logo Rev.Labs"
@@ -108,13 +116,12 @@ export default function LoginPage() {
                   />
                 </div>
               </div>
-
-              <p className="mt-4 text-sm text-white/50">Rev.Labs</p>
             </div>
 
+            {/* LOGO MEDGRUPO PADRONIZADA */}
             <div className="mb-8">
-              <div className="mb-4 flex h-12 w-40 items-center rounded-xl border border-white/10 px-4">
-                <div className="relative h-8 w-full">
+              <div className="mb-4 flex h-14 w-44 items-center rounded-xl border border-white/10 px-4">
+                <div className="relative h-7 w-full">
                   <Image
                     src="/brands/medgrupo-logo.png"
                     alt="Logo Medgrupo"
@@ -141,7 +148,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="seuemail@empresa.com.br"
-                  className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm outline-none transition focus:border-cyan-400/50"
+                  className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm outline-none transition focus:border-[#0465cd]"
                   required
                 />
               </div>
@@ -155,7 +162,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Digite sua senha"
-                    className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 pr-16 text-sm outline-none transition focus:border-cyan-400/50"
+                    className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 pr-16 text-sm outline-none transition focus:border-[#0465cd]"
                     required
                   />
 
@@ -175,10 +182,11 @@ export default function LoginPage() {
                 </div>
               ) : null}
 
+              {/* BOTÃO COM GRADIENTE REVLABS */}
               <button
                 type="submit"
                 disabled={loading}
-                className="h-12 w-full rounded-2xl bg-cyan-400/90 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-12 w-full rounded-2xl bg-[linear-gradient(90deg,#38e038_0%,#0465cd_100%)] text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? "Entrando..." : "Entrar"}
               </button>

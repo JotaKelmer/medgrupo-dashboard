@@ -1,100 +1,211 @@
 import { Card } from "@/components/ui/card";
-import type { FunnelResult } from "@/lib/dashboard/types";
-import { formatNumber, formatPercent } from "@/lib/dashboard/utils";
+import type { KpiMetrics } from "@/lib/dashboard/types";
+import {
+  formatCurrency,
+  formatNumber,
+  formatPercent,
+  safeDivide,
+} from "@/lib/dashboard/utils";
 
-const tones = [
-  "linear-gradient(135deg, rgba(217,235,26,0.3), rgba(217,235,26,0.14))",
-  "linear-gradient(135deg, rgba(72,150,150,0.28), rgba(72,150,150,0.12))",
-  "linear-gradient(135deg, rgba(142,26,235,0.28), rgba(142,26,235,0.12))",
-  "linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06))",
-  "linear-gradient(135deg, rgba(217,235,26,0.18), rgba(72,150,150,0.12))"
+type Props = {
+  kpis: KpiMetrics;
+};
+
+type FunnelStep = {
+  id: string;
+  label: string;
+  value: number;
+  formattedValue: string;
+  badge?: string | null;
+};
+
+const STEP_TONES = [
+  "linear-gradient(180deg, #d7e4f7 0%, #c9d7ea 100%)",
+  "linear-gradient(180deg, #c0d2ea 0%, #a9c2e3 100%)",
+  "linear-gradient(180deg, #96b7e5 0%, #6f9edc 100%)",
+  "linear-gradient(180deg, #4d89de 0%, #2d73d6 100%)",
+  "linear-gradient(180deg, #1c5bc0 0%, #11489f 100%)",
 ];
 
-function widthPercentage(value: number, maxValue: number) {
-  if (maxValue <= 0) {
-    return 100;
-  }
+const STEP_TEXT_TONES = [
+  "text-slate-900",
+  "text-slate-900",
+  "text-slate-900",
+  "text-white",
+  "text-white",
+];
 
-  return Math.max(38, Math.round((value / maxValue) * 100));
+const STEP_WIDTHS = [92, 82, 70, 58, 46];
+
+function formatFunnelValue(stepId: string, value: number) {
+  return stepId === "investment" ? formatCurrency(value) : formatNumber(value);
 }
 
-export function FunnelViewer({ funnel }: { funnel: FunnelResult | null }) {
-  if (!funnel) {
-    return (
-      <Card>
-        <p className="text-sm text-white/60">
-          Nenhum funil configurado para essa conta.
-        </p>
-      </Card>
-    );
+function buildFinalStep(kpis: KpiMetrics) {
+  if (kpis.messagesStarted > 0 && kpis.leads > 0) {
+    const combined = kpis.messagesStarted + kpis.leads;
+    return {
+      label: "Conversas / Inscrições",
+      value: combined,
+      badge:
+        kpis.linkClicks > 0
+          ? `Tx conversão ${formatPercent(
+              safeDivide(combined, kpis.linkClicks) * 100,
+            )}`
+          : null,
+    };
   }
 
-  const maxValue = Math.max(...funnel.steps.map((step) => step.value), 1);
+  if (kpis.messagesStarted > 0) {
+    return {
+      label: "Conversas",
+      value: kpis.messagesStarted,
+      badge:
+        kpis.linkClicks > 0
+          ? `Tx conversão ${formatPercent(
+              safeDivide(kpis.messagesStarted, kpis.linkClicks) * 100,
+            )}`
+          : null,
+    };
+  }
+
+  if (kpis.leads > 0) {
+    return {
+      label: "Inscrições",
+      value: kpis.leads,
+      badge:
+        kpis.linkClicks > 0
+          ? `Tx conversão ${formatPercent(
+              safeDivide(kpis.leads, kpis.linkClicks) * 100,
+            )}`
+          : null,
+    };
+  }
+
+  return {
+    label: kpis.resultLabel || "Resultados",
+    value: kpis.results,
+    badge:
+      kpis.linkClicks > 0
+        ? `Tx conversão ${formatPercent(
+            safeDivide(kpis.results, kpis.linkClicks) * 100,
+          )}`
+        : null,
+  };
+}
+
+function buildSteps(kpis: KpiMetrics): FunnelStep[] {
+  const finalStep = buildFinalStep(kpis);
+
+  return [
+    {
+      id: "investment",
+      label: "Investimento",
+      value: kpis.investment,
+      formattedValue: formatFunnelValue("investment", kpis.investment),
+    },
+    {
+      id: "impressions",
+      label: "Impressões",
+      value: kpis.impressions,
+      formattedValue: formatFunnelValue("impressions", kpis.impressions),
+      badge: kpis.cpm > 0 ? `CPM ${formatCurrency(kpis.cpm)}` : null,
+    },
+    {
+      id: "clicks",
+      label: "Cliques",
+      value: kpis.clicks,
+      formattedValue: formatFunnelValue("clicks", kpis.clicks),
+      badge: `CTR ${formatPercent(kpis.ctr)}`,
+    },
+    {
+      id: "link-clicks",
+      label: "Cliques no link",
+      value: kpis.linkClicks,
+      formattedValue: formatFunnelValue("link-clicks", kpis.linkClicks),
+      badge:
+        kpis.clicks > 0
+          ? `Etapa anterior ${formatPercent(
+              safeDivide(kpis.linkClicks, kpis.clicks) * 100,
+            )}`
+          : null,
+    },
+    {
+      id: "final",
+      label: finalStep.label,
+      value: finalStep.value,
+      formattedValue: formatFunnelValue("final", finalStep.value),
+      badge: finalStep.badge,
+    },
+  ];
+}
+
+export function FunnelViewer({ kpis }: Props) {
+  const steps = buildSteps(kpis);
 
   return (
-    <Card className="space-y-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-            Funil customizável
-          </p>
-          <h2 className="mt-2 text-xl font-semibold text-white">{funnel.name}</h2>
-        </div>
-
-        <p className="max-w-md text-sm leading-6 text-white/55">
-          A largura de cada estágio acompanha o volume da etapa. A queda visual
-          ajuda a localizar rapidamente os maiores gargalos.
+    <Card className="space-y-4 overflow-hidden">
+      <div className="text-center">
+        <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+          Funil
         </p>
+        <h2 className="mt-2 text-xl font-semibold text-white">
+          Leitura simplificada da jornada principal
+        </h2>
       </div>
 
-      <div className="overflow-hidden rounded-[28px] border border-white/8 bg-white/3 p-3 sm:p-4">
-        {funnel.steps.map((step, index) => {
-          const currentWidth = widthPercentage(step.value, maxValue);
-          const nextValue = funnel.steps[index + 1]?.value ?? step.value;
-          const nextWidth = widthPercentage(nextValue, maxValue);
-          const topInset = (100 - currentWidth) / 2;
+      <div className="mx-auto flex w-full max-w-[440px] flex-col gap-2">
+        {steps.map((step, index) => {
+          const width = STEP_WIDTHS[index];
+          const nextWidth = STEP_WIDTHS[index + 1] ?? STEP_WIDTHS[index];
+          const topInset = (100 - width) / 2;
           const bottomInset = (100 - nextWidth) / 2;
+          const isFinalStep = index === steps.length - 1;
 
           return (
             <div
               key={step.id}
-              className="relative isolate flex min-h-[110px] items-center justify-center px-1 py-2 sm:min-h-[118px]"
+              className="relative isolate mx-auto w-full"
+              style={{
+                maxWidth: `${width}%`,
+                minHeight: isFinalStep ? "132px" : "96px",
+              }}
             >
-              <div className="absolute inset-0 flex justify-center">
-                <div
-                  className="h-full w-full rounded-3xl border border-white/8 shadow-[0_18px_48px_rgba(0,0,0,0.18)]"
-                  style={{
-                    clipPath: `polygon(${topInset}% 0%, ${100 - topInset}% 0%, ${100 - bottomInset}% 100%, ${bottomInset}% 100%)`,
-                    background: tones[index % tones.length]
-                  }}
-                />
-              </div>
+              <div
+                className="absolute inset-0 shadow-[0_22px_38px_rgba(0,0,0,0.18)]"
+                style={{
+                  clipPath: `polygon(${topInset}% 0%, ${100 - topInset}% 0%, ${100 - bottomInset}% 100%, ${bottomInset}% 100%)`,
+                  background: STEP_TONES[index],
+                  borderRadius: isFinalStep ? "0 0 18px 18px" : "0",
+                }}
+              />
 
-              <div className="relative z-10 flex w-full max-w-[780px] flex-col gap-3 px-5 py-4 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-                <div className="min-w-0">
-                  <p className="text-xs uppercase tracking-[0.22em] text-white/45">
-                    {index === 0 ? "Entrada" : `Etapa ${index + 1}`}
-                  </p>
-                  <h3 className="mt-1 text-lg font-semibold text-white">
-                    {step.label}
-                  </h3>
-                </div>
+              <div
+                className={`relative z-10 flex h-full flex-col items-center justify-center gap-1 px-3 py-4 text-center sm:px-4 ${STEP_TEXT_TONES[index]}`}
+              >
+                <p
+                  className={`${
+                    isFinalStep ? "text-sm sm:text-base" : "text-sm"
+                  } font-semibold`}
+                >
+                  {step.label}
+                </p>
 
-                <div className="flex flex-col items-center gap-2 sm:items-end">
-                  <p className="text-3xl font-semibold text-white">
-                    {formatNumber(step.value)}
-                  </p>
+                <p
+                  className={`${
+                    isFinalStep
+                      ? "text-[1.8rem] sm:text-[2rem]"
+                      : "text-[1.7rem] sm:text-[2.1rem]"
+                  } font-semibold leading-none tracking-tight`}
+                >
+                  {step.formattedValue}
+                </p>
 
-                  {index > 0 && step.rateFromPrevious !== null ? (
-                    <span className="inline-flex rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs uppercase tracking-[0.16em] text-[var(--color-teal)]">
-                      Conversão {formatPercent(step.rateFromPrevious)}
-                    </span>
-                  ) : (
-                    <span className="inline-flex rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs uppercase tracking-[0.16em] text-white/55">
-                      Base do funil
-                    </span>
-                  )}
-                </div>
+                {step.badge ? (
+                  <span className="inline-flex max-w-[92%] flex-wrap justify-center rounded-full bg-black/15 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-current">
+                    {step.badge}
+                  </span>
+                ) : null}
               </div>
             </div>
           );

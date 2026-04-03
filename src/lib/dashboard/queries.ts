@@ -4,7 +4,7 @@ import {
   buildBudgetState,
   buildCreativeHealth,
   buildDemographics,
-  buildFunnel,
+  buildExecutiveFunnel,
   buildKpis,
   buildPerformanceRows,
   buildTimeline,
@@ -36,6 +36,10 @@ import {
   getSupabaseConfigDiagnostics,
   shouldUseMocks
 } from "@/lib/supabase/admin";
+import {
+  buildDashboardMediaBenchmarks,
+  getHistoricalFetchRange,
+} from "./ga-media";
 
 const SELECT_WORKSPACES = "id, name";
 const SELECT_CAMPAIGNS = "id, workspace_id, ad_account_id, platform, external_id, name, objective, status";
@@ -102,6 +106,8 @@ const SELECT_ADS = "id, name";
 
 const IN_QUERY_CHUNK_SIZE = 150;
 
+const GA_HISTORY_CYCLES = 6;
+
 type WorkspaceContext = {
   workspaceOptions: SelectOption[];
   preferredWorkspaceId: string;
@@ -110,6 +116,71 @@ type WorkspaceContext = {
 function toStringValue(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+function normalizeStringParam(value: string | string[] | undefined) {
+  const resolved = toStringValue(value);
+
+  if (resolved == null) return undefined;
+
+  const trimmed = resolved.trim();
+
+  if (!trimmed) return undefined;
+
+  const lowered = trimmed.toLowerCase();
+
+  if (lowered === "undefined" || lowered === "null") {
+    return undefined;
+  }
+
+  return trimmed;
+}
+
+function normalizePlatformParam(value: string | string[] | undefined) {
+  const normalized = normalizeStringParam(value);
+
+  if (!normalized) return undefined;
+
+  if (normalized === "all" || normalized === "meta" || normalized === "google") {
+    return normalized as FilterPlatform;
+  }
+
+  return undefined;
+}
+
+function normalizeDateParam(value: string | string[] | undefined) {
+  const normalized = normalizeStringParam(value);
+
+  if (!normalized) return undefined;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return normalized;
+  }
+
+  const isoDateTimeMatch = normalized.match(/^(\d{4}-\d{2}-\d{2})(?:T|\s)/);
+  if (isoDateTimeMatch?.[1]) {
+    return isoDateTimeMatch[1];
+  }
+
+  const brDateMatch = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (brDateMatch) {
+    const [, day, month, year] = brDateMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  const slashIsoMatch = normalized.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+  if (slashIsoMatch) {
+    const [, year, month, day] = slashIsoMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  const parsedDate = new Date(normalized);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return undefined;
+  }
+
+  return toISODate(parsedDate);
 }
 
 function numberValue(value: unknown) {
@@ -140,17 +211,79 @@ function getSupabaseOrThrow() {
 
 export function parseFilters(input?: Record<string, string | string[] | undefined>): DashboardFilters {
   return {
-    workspaceId: toStringValue(input?.workspaceId),
-    startDate: toStringValue(input?.startDate),
-    endDate: toStringValue(input?.endDate),
-    campaignId: toStringValue(input?.campaignId),
-    platform: (toStringValue(input?.platform) as FilterPlatform | undefined) ?? undefined,
-    funnelId: toStringValue(input?.funnelId)
+    workspaceId: normalizeStringParam(
+      input?.workspaceId ?? input?.workspace ?? input?.workspace_id
+    ),
+    startDate: normalizeDateParam(
+      input?.startDate ?? input?.from ?? input?.dateFrom ?? input?.date_start
+    ),
+    endDate: normalizeDateParam(
+      input?.endDate ?? input?.to ?? input?.dateTo ?? input?.date_end
+    ),
+    campaignId: normalizeStringParam(input?.campaignId ?? input?.campaign_id),
+    product: normalizeStringParam(input?.product),
+    campaignGroup: normalizeStringParam(input?.campaignGroup),
+    platform: normalizePlatformParam(input?.platform),
+    funnelId: normalizeStringParam(input?.funnelId ?? input?.funnel_id)
   };
 }
 
 function mapWorkspaceOption(data: Array<{ id: string; name: string }>): SelectOption[] {
   return data.map((item) => ({ value: item.id, label: item.name }));
+}
+
+function normalizeBracketToken(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function extractCampaignParts(name: string) {
+  const matches = [...name.matchAll(/\[([^\]]+)\]/g)].map((match) => normalizeBracketToken(match[1] ?? ""));
+  return {
+    product: matches[0] ?? "",
+    campaignGroup: matches[1] ?? ""
+  };
+}
+
+function sortCampaignOptions(options: SelectOption[]) {
+  return [...options].sort((a, b) => {
+    const partsA = extractCampaignParts(a.label);
+    const partsB = extractCampaignParts(b.label);
+
+    const productCompare = partsA.product.localeCompare(partsB.product, "pt-BR");
+    if (productCompare !== 0) return productCompare;
+
+    const groupCompare = partsA.campaignGroup.localeCompare(partsB.campaignGroup, "pt-BR");
+    if (groupCompare !== 0) return groupCompare;
+
+    return a.label.localeCompare(b.label, "pt-BR");
+  });
+}
+
+function buildCampaignOptionsFromCampaigns(campaigns: CampaignRecord[], activeCampaignIds?: Set<string>) {
+  const options = campaigns
+    .filter((campaign) => {
+      if (!activeCampaignIds) return true;
+      return activeCampaignIds.has(campaign.id);
+    })
+    .map((campaign) => ({ value: campaign.id, label: campaign.name }));
+
+  return sortCampaignOptions(options);
+}
+
+function matchesCampaignGrouping(
+  campaignName: string,
+  filters: Pick<Required<DashboardFilters>, "product" | "campaignGroup">
+) {
+  const parts = extractCampaignParts(campaignName);
+
+  if (filters.product && parts.product !== filters.product) return false;
+  if (filters.campaignGroup && parts.campaignGroup !== filters.campaignGroup) return false;
+
+  return true;
+}
+
+function buildCampaignLookup(campaigns: CampaignRecord[]) {
+  return new Map(campaigns.map((campaign) => [campaign.id, campaign]));
 }
 
 function mapDailyMetricRow(row: any): DailyMetricRecord {
@@ -297,16 +430,9 @@ function getDefaultDateRange() {
 
 function enrichKpisWithBusinessCounts(
   kpis: ReturnType<typeof buildKpis>,
-  rows: DailyMetricRecord[]
+  _rows: DailyMetricRecord[]
 ) {
-  return {
-    ...kpis,
-    leads: rows.reduce((total, row) => total + numberValue(row.leads), 0),
-    messagesStarted: rows.reduce(
-      (total, row) => total + numberValue(row.messagesStarted),
-      0
-    )
-  };
+  return kpis;
 }
 
 function resolveFilterDefaults(
@@ -316,25 +442,62 @@ function resolveFilterDefaults(
 ) {
   const defaultDateRange = getDefaultDateRange();
 
+  const normalizedStartDate = normalizeDateParam(input.startDate);
+  const normalizedEndDate = normalizeDateParam(input.endDate);
+
+  let startDate = normalizedStartDate ?? defaultDateRange.startDate;
+  let endDate = normalizedEndDate ?? defaultDateRange.endDate;
+
+  if (normalizedStartDate && !normalizedEndDate) {
+    endDate = normalizedStartDate;
+  }
+
+  if (!normalizedStartDate && normalizedEndDate) {
+    startDate = normalizedEndDate;
+  }
+
+  if (startDate > endDate) {
+    [startDate, endDate] = [endDate, startDate];
+  }
+
   return {
-    workspaceId: input.workspaceId ?? preferredWorkspaceId ?? workspaceOptions[0]?.value ?? "",
-    startDate: input.startDate ?? defaultDateRange.startDate,
-    endDate: input.endDate ?? defaultDateRange.endDate,
-    campaignId: input.campaignId ?? "",
-    platform: input.platform ?? "all",
-    funnelId: input.funnelId ?? ""
+    workspaceId: normalizeStringParam(input.workspaceId) ?? preferredWorkspaceId ?? workspaceOptions[0]?.value ?? "",
+    startDate,
+    endDate,
+    campaignId: normalizeStringParam(input.campaignId) ?? "",
+    product: normalizeStringParam(input.product) ?? "",
+    campaignGroup: normalizeStringParam(input.campaignGroup) ?? "",
+    platform: normalizePlatformParam(input.platform) ?? "all",
+    funnelId: normalizeStringParam(input.funnelId) ?? ""
   } satisfies Required<DashboardFilters>;
 }
 
+function getMockActiveCampaignIdsIn2026(workspaceId: string) {
+  return new Set(
+    mockSnapshot.dailyMetrics
+      .filter(
+        (row) =>
+          row.workspaceId === workspaceId &&
+          row.metricDate >= "2026-01-01" &&
+          row.metricDate <= "2026-12-31" &&
+          numberValue(row.spend) > 0 &&
+          Boolean(row.campaignId)
+      )
+      .map((row) => row.campaignId as string)
+  );
+}
+
 function buildMockCampaignOptions(workspaceId: string) {
-  return mockSnapshot.campaigns
-    .filter((campaign) => campaign.workspaceId === workspaceId)
-    .map((campaign) => ({ value: campaign.id, label: campaign.name }));
+  return buildCampaignOptionsFromCampaigns(
+    mockSnapshot.campaigns.filter((campaign) => campaign.workspaceId === workspaceId),
+    getMockActiveCampaignIdsIn2026(workspaceId)
+  );
 }
 
 function filterRows<T extends { workspaceId: string; metricDate?: string; campaignId?: string | null; platform?: string }>(
   rows: T[],
-  filters: Required<DashboardFilters>
+  filters: Required<DashboardFilters>,
+  campaignsById?: Map<string, CampaignRecord>
 ) {
   return rows.filter((row) => {
     if (row.workspaceId !== filters.workspaceId) return false;
@@ -346,6 +509,13 @@ function filterRows<T extends { workspaceId: string; metricDate?: string; campai
     if (filters.campaignId && row.campaignId && row.campaignId !== filters.campaignId) return false;
     if (filters.campaignId && row.campaignId === null) return false;
     if (filters.platform !== "all" && row.platform && row.platform !== filters.platform) return false;
+
+    if ((filters.product || filters.campaignGroup) && campaignsById) {
+      if (!row.campaignId) return false;
+      const campaign = campaignsById.get(row.campaignId);
+      if (!campaign) return false;
+      if (!matchesCampaignGrouping(campaign.name, filters)) return false;
+    }
 
     return true;
   });
@@ -465,6 +635,28 @@ async function getRealCampaigns(workspaceId: string) {
   }
 
   return (data ?? []).map(mapCampaign);
+}
+
+async function getRealActiveCampaignIdsIn2026(workspaceId: string) {
+  const supabase = getSupabaseOrThrow();
+  const { data, error } = await supabase
+    .from("daily_metrics")
+    .select("campaign_id, spend, metric_date")
+    .eq("workspace_id", workspaceId)
+    .gte("metric_date", "2026-01-01")
+    .lte("metric_date", "2026-12-31")
+    .gt("spend", 0);
+
+  if (error) {
+    logQueryError("active_campaign_ids_2026", error, { workspaceId });
+    throw error;
+  }
+
+  return new Set(
+    (data ?? [])
+      .map((row: any) => row.campaign_id)
+      .filter(Boolean)
+  );
 }
 
 async function getRealFunnels(workspaceId: string) {
@@ -781,21 +973,72 @@ function buildMockFunnels(workspaceId: string) {
 }
 
 async function getDashboardOverviewFromMock(filtersInput: DashboardFilters): Promise<DashboardOverviewData> {
-  const workspaceOptions = mapWorkspaceOption(mockSnapshot.workspaces.map(({ id, name }) => ({ id, name })));
+  const workspaceOptions = mapWorkspaceOption(
+    mockSnapshot.workspaces.map(({ id, name }) => ({ id, name })),
+  );
+
   const filters = resolveFilterDefaults(filtersInput, workspaceOptions);
   const funnels = buildMockFunnels(filters.workspaceId);
-  const activeFunnelId = filters.funnelId || funnels.find((item) => item.isDefault)?.id || funnels[0]?.id || "";
+  const activeFunnelId =
+    filters.funnelId ||
+    funnels.find((item) => item.isDefault)?.id ||
+    funnels[0]?.id ||
+    "";
+
   const resolvedFilters = { ...filters, funnelId: activeFunnelId };
 
-  const dailyRows = filterRows(mockSnapshot.dailyMetrics, resolvedFilters);
-  const demographicRows = filterRows(mockSnapshot.demographicMetrics, resolvedFilters);
-  const campaigns = mockSnapshot.campaigns.filter((campaign) => campaign.workspaceId === resolvedFilters.workspaceId);
+  const campaigns = mockSnapshot.campaigns.filter(
+    (campaign) => campaign.workspaceId === resolvedFilters.workspaceId,
+  );
+
+  const campaignsById = buildCampaignLookup(campaigns);
+
+  const dailyRows = filterRows(
+    mockSnapshot.dailyMetrics,
+    resolvedFilters,
+    campaignsById,
+  ) as DailyMetricRecord[];
+
+  const historicalRange = getHistoricalFetchRange(
+    resolvedFilters.startDate,
+    resolvedFilters.endDate,
+    GA_HISTORY_CYCLES,
+  );
+
+  const historicalRows = filterRows(
+    mockSnapshot.dailyMetrics,
+    {
+      ...resolvedFilters,
+      startDate: historicalRange.startDate,
+      endDate: historicalRange.endDate,
+    },
+    campaignsById,
+  ) as DailyMetricRecord[];
+
+  const demographicRows = filterRows(
+    mockSnapshot.demographicMetrics,
+    resolvedFilters,
+    campaignsById,
+  ) as DemographicMetricRecord[];
+
+  const metaDailyRows = dailyRows.filter((row) => row.platform === "meta");
   const ads = mockSnapshot.ads.map((ad) => ({ id: ad.id, name: ad.name }));
-  const creativeRules = mockSnapshot.creativeRules.find((item) => item.workspaceId === resolvedFilters.workspaceId);
-  const { summary, rows } = buildCreativeHealth(dailyRows, campaigns, ads, creativeRules);
+  const creativeRules = mockSnapshot.creativeRules.find(
+    (item) => item.workspaceId === resolvedFilters.workspaceId,
+  );
+
+  const { summary, rows } = buildCreativeHealth(
+    metaDailyRows,
+    campaigns,
+    ads,
+    creativeRules,
+  );
+
   const budgetPlan = buildBudgetState({
     workspaceId: resolvedFilters.workspaceId,
-    plan: mockSnapshot.budgetPlans.find((plan) => plan.workspaceId === resolvedFilters.workspaceId)
+    plan: mockSnapshot.budgetPlans.find(
+      (plan) => plan.workspaceId === resolvedFilters.workspaceId,
+    )
       ? {
           id: mockSnapshot.budgetPlans[0].id,
           name: mockSnapshot.budgetPlans[0].name,
@@ -803,13 +1046,13 @@ async function getDashboardOverviewFromMock(filtersInput: DashboardFilters): Pro
           periodDays: mockSnapshot.budgetPlans[0].periodDays,
           startDate: mockSnapshot.budgetPlans[0].startDate,
           endDate: mockSnapshot.budgetPlans[0].endDate,
-          notes: mockSnapshot.budgetPlans[0].notes
+          notes: mockSnapshot.budgetPlans[0].notes,
         }
       : null,
     channels: mockSnapshot.budgetChannels.map((item) => ({
       platform: item.platform,
       percentage: item.percentage,
-      amount: item.amount
+      amount: item.amount,
     })),
     objectives: mockSnapshot.budgetObjectives.map((item) => ({
       id: item.id,
@@ -818,17 +1061,29 @@ async function getDashboardOverviewFromMock(filtersInput: DashboardFilters): Pro
       percentage: item.percentage,
       periodDays: item.periodDays,
       dailyBudget: item.dailyBudget,
-      totalBudget: item.totalBudget
+      totalBudget: item.totalBudget,
     })),
     benchmarks: toBenchmarkRecord(
       mockSnapshot.benchmarks
         .filter((item) => item.workspaceId === resolvedFilters.workspaceId)
-        .map((item) => ({ platform: item.platform, metricKey: item.metricKey, metricValue: item.metricValue }))
-    )
+        .map((item) => ({
+          platform: item.platform,
+          metricKey: item.metricKey,
+          metricValue: item.metricValue,
+        })),
+    ),
   });
 
   const budgetComparison = buildBudgetComparison(budgetPlan, dailyRows);
   const kpis = enrichKpisWithBusinessCounts(buildKpis(dailyRows), dailyRows);
+
+  const mediaBenchmarks = buildDashboardMediaBenchmarks({
+    currentRows: dailyRows,
+    historicalRows,
+    currentStartDate: resolvedFilters.startDate,
+    currentEndDate: resolvedFilters.endDate,
+    cycles: GA_HISTORY_CYCLES,
+  });
 
   return {
     filters: resolvedFilters,
@@ -836,13 +1091,9 @@ async function getDashboardOverviewFromMock(filtersInput: DashboardFilters): Pro
     campaignOptions: buildMockCampaignOptions(resolvedFilters.workspaceId),
     funnelOptions: funnels.map((item) => ({ value: item.id, label: item.name })),
     kpis,
+    mediaBenchmarks,
     timeline: buildTimeline(dailyRows),
-    funnel: buildFunnel(
-      funnels.find((item) => item.id === resolvedFilters.funnelId) ?? null,
-      dailyRows,
-      mockSnapshot.customMetricDefinitions.filter((item) => item.workspaceId === resolvedFilters.workspaceId),
-      filterRows(mockSnapshot.customMetricValues, resolvedFilters)
-    ),
+    funnel: buildExecutiveFunnel(dailyRows),
     demographics: buildDemographics(demographicRows),
     creativeSummary: summary,
     creativeRows: rows,
@@ -850,10 +1101,12 @@ async function getDashboardOverviewFromMock(filtersInput: DashboardFilters): Pro
       creativeSummary: summary,
       creativeRows: rows,
       kpis,
-      syncRuns: mockSnapshot.syncRuns.filter((item) => item.workspaceId === resolvedFilters.workspaceId),
-      budgetComparison
+      syncRuns: mockSnapshot.syncRuns.filter(
+        (item) => item.workspaceId === resolvedFilters.workspaceId,
+      ),
+      budgetComparison,
     }),
-    performanceRows: buildPerformanceRows(dailyRows, campaigns)
+    performanceRows: buildPerformanceRows(dailyRows, campaigns),
   };
 }
 
@@ -933,27 +1186,83 @@ async function getControlOverviewFromMock(filtersInput: DashboardFilters): Promi
 
 async function getDashboardOverviewFromSupabase(filtersInput: DashboardFilters): Promise<DashboardOverviewData> {
   const { workspaceOptions, preferredWorkspaceId } = await getWorkspaceContext();
-  const filters = resolveFilterDefaults(filtersInput, workspaceOptions, preferredWorkspaceId);
+  const filters = resolveFilterDefaults(
+    filtersInput,
+    workspaceOptions,
+    preferredWorkspaceId,
+  );
 
   if (!filters.workspaceId) {
     throw new Error("Nenhum workspace ativo encontrado no Supabase.");
   }
 
-  const campaigns = await getRealCampaigns(filters.workspaceId);
-  const funnels = await getRealFunnels(filters.workspaceId);
-  const activeFunnelId = filters.funnelId || funnels.find((item) => item.isDefault)?.id || funnels[0]?.id || "";
-  const resolvedFilters = { ...filters, funnelId: activeFunnelId };
-
-  const [dailyRows, demographicRows, customMetrics, creativeRulesRow, syncRuns, budgetPlan] = await Promise.all([
-    getRealDailyMetrics(resolvedFilters),
-    getRealDemographics(resolvedFilters),
-    getRealCustomMetrics(resolvedFilters),
-    getRealCreativeRules(resolvedFilters.workspaceId),
-    getRealSyncRuns(resolvedFilters.workspaceId),
-    getRealBudget(resolvedFilters.workspaceId)
+  const [campaigns, activeCampaignIdsIn2026, funnels] = await Promise.all([
+    getRealCampaigns(filters.workspaceId),
+    getRealActiveCampaignIdsIn2026(filters.workspaceId),
+    getRealFunnels(filters.workspaceId),
   ]);
 
-  const adIds = [...new Set(dailyRows.map((row) => row.adId).filter(Boolean) as string[])];
+  const activeFunnelId =
+    filters.funnelId ||
+    funnels.find((item) => item.isDefault)?.id ||
+    funnels[0]?.id ||
+    "";
+
+  const resolvedFilters = { ...filters, funnelId: activeFunnelId };
+
+  const historicalRange = getHistoricalFetchRange(
+    resolvedFilters.startDate,
+    resolvedFilters.endDate,
+    GA_HISTORY_CYCLES,
+  );
+
+  const [
+    dailyRowsRaw,
+    historicalDailyRowsRaw,
+    demographicRowsRaw,
+    creativeRulesRow,
+    syncRuns,
+    budgetPlan,
+  ] = await Promise.all([
+    getRealDailyMetrics(resolvedFilters),
+    getRealDailyMetrics({
+      ...resolvedFilters,
+      startDate: historicalRange.startDate,
+      endDate: historicalRange.endDate,
+    }),
+    getRealDemographics(resolvedFilters),
+    getRealCreativeRules(resolvedFilters.workspaceId),
+    getRealSyncRuns(resolvedFilters.workspaceId),
+    getRealBudget(resolvedFilters.workspaceId),
+  ]);
+
+  const campaignsById = buildCampaignLookup(campaigns);
+
+  const dailyRows = filterRows(
+    dailyRowsRaw,
+    resolvedFilters,
+    campaignsById,
+  ) as DailyMetricRecord[];
+
+  const historicalDailyRows = filterRows(
+    historicalDailyRowsRaw,
+    {
+      ...resolvedFilters,
+      startDate: historicalRange.startDate,
+      endDate: historicalRange.endDate,
+    },
+    campaignsById,
+  ) as DailyMetricRecord[];
+
+  const demographicRows = filterRows(
+    demographicRowsRaw,
+    resolvedFilters,
+    campaignsById,
+  ) as DemographicMetricRecord[];
+
+
+  const metaDailyRows = dailyRows.filter((row) => row.platform === "meta");
+  const adIds = [...new Set(metaDailyRows.map((row) => row.adId).filter(Boolean) as string[])];
   const ads = await getRealAdsByIds(adIds);
 
   const creativeRules = {
@@ -962,26 +1271,39 @@ async function getDashboardOverviewFromSupabase(filtersInput: DashboardFilters):
     goodMax: numberValue(creativeRulesRow.good_max) || 6,
     attentionMax: numberValue(creativeRulesRow.attention_max) || 10,
     replaceMax: numberValue(creativeRulesRow.replace_max) || 15,
-    criticalMax: numberValue(creativeRulesRow.critical_max) || 18
+    criticalMax: numberValue(creativeRulesRow.critical_max) || 18,
   };
 
-  const { summary, rows } = buildCreativeHealth(dailyRows, campaigns, ads, creativeRules);
+  const { summary, rows } = buildCreativeHealth(
+    metaDailyRows,
+    campaigns,
+    ads,
+    creativeRules,
+  );
+
   const budgetComparison = buildBudgetComparison(budgetPlan, dailyRows);
   const kpis = enrichKpisWithBusinessCounts(buildKpis(dailyRows), dailyRows);
+
+  const mediaBenchmarks = buildDashboardMediaBenchmarks({
+    currentRows: dailyRows,
+    historicalRows: historicalDailyRows,
+    currentStartDate: resolvedFilters.startDate,
+    currentEndDate: resolvedFilters.endDate,
+    cycles: GA_HISTORY_CYCLES,
+  });
 
   return {
     filters: resolvedFilters,
     workspaceOptions,
-    campaignOptions: campaigns.map((item) => ({ value: item.id, label: item.name })),
+    campaignOptions: buildCampaignOptionsFromCampaigns(
+      campaigns,
+      activeCampaignIdsIn2026,
+    ),
     funnelOptions: funnels.map((item) => ({ value: item.id, label: item.name })),
     kpis,
+    mediaBenchmarks,
     timeline: buildTimeline(dailyRows),
-    funnel: buildFunnel(
-      funnels.find((item) => item.id === resolvedFilters.funnelId) ?? null,
-      dailyRows,
-      customMetrics.definitions,
-      customMetrics.values
-    ),
+    funnel: buildExecutiveFunnel(dailyRows),
     demographics: buildDemographics(demographicRows),
     creativeSummary: summary,
     creativeRows: rows,
@@ -990,9 +1312,9 @@ async function getDashboardOverviewFromSupabase(filtersInput: DashboardFilters):
       creativeRows: rows,
       kpis,
       syncRuns,
-      budgetComparison
+      budgetComparison,
     }),
-    performanceRows: buildPerformanceRows(dailyRows, campaigns)
+    performanceRows: buildPerformanceRows(dailyRows, campaigns),
   };
 }
 
@@ -1006,8 +1328,9 @@ async function getBudgetOverviewFromSupabase(filtersInput: DashboardFilters): Pr
 
   const resolvedFilters = { ...filters, funnelId: "" };
 
-  const [campaigns, budgetPlan, dailyRows] = await Promise.all([
+  const [campaigns, activeCampaignIdsIn2026, budgetPlan, dailyRows] = await Promise.all([
     getRealCampaigns(resolvedFilters.workspaceId),
+    getRealActiveCampaignIdsIn2026(resolvedFilters.workspaceId),
     getRealBudget(resolvedFilters.workspaceId),
     getRealDailyMetrics(resolvedFilters)
   ]);
@@ -1015,7 +1338,7 @@ async function getBudgetOverviewFromSupabase(filtersInput: DashboardFilters): Pr
   return {
     filters: resolvedFilters,
     workspaceOptions,
-    campaignOptions: campaigns.map((item) => ({ value: item.id, label: item.name })),
+    campaignOptions: buildCampaignOptionsFromCampaigns(campaigns, activeCampaignIdsIn2026),
     budgetPlan,
     budgetComparison: buildBudgetComparison(budgetPlan, dailyRows)
   };

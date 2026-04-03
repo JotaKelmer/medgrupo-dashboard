@@ -26,6 +26,8 @@ export type DashboardFilters = {
   startDate?: string;
   endDate?: string;
   campaignId?: string;
+  product?: string;
+  campaignGroup?: string;
   platform?: FilterPlatform;
   funnelId?: string;
 };
@@ -258,8 +260,17 @@ export type KpiMetrics = {
   revenue: number;
   ctr: number;
   cpm: number;
+  cpc: number;
+  cpa: number;
+  roas: number;
+  conversionRate: number;
+  primaryAcquisitions: number;
   impressions: number;
   clicks: number;
+  linkClicks: number;
+  leads: number;
+  messagesStarted: number;
+  purchases: number;
 };
 
 export type TimelinePoint = {
@@ -268,11 +279,15 @@ export type TimelinePoint = {
   results: number;
 };
 
+export type FunnelStepValueType = "currency" | "number";
+
 export type FunnelStepResult = {
   id: string;
   label: string;
   value: number;
+  valueType?: FunnelStepValueType;
   rateFromPrevious: number | null;
+  helperText?: string | null;
 };
 
 export type FunnelResult = {
@@ -378,12 +393,35 @@ export type BudgetComparisonRow = {
   realizedResults: number;
 };
 
+export type DashboardMediaSnapshot = {
+  impressions: number;
+  clicks: number;
+  spend: number;
+  signups: number;
+  messagesStarted: number;
+  acquisitions: number;
+  ctr: number;
+  cpa: number | null;
+  conversionRate: number;
+};
+
+export type DashboardMediaBenchmark = {
+  current: DashboardMediaSnapshot;
+  historicalAverage: DashboardMediaSnapshot | null;
+};
+
+export type DashboardMediaBenchmarks = {
+  googleAds: DashboardMediaBenchmark;
+  metaAds: DashboardMediaBenchmark;
+};
+
 export type DashboardOverviewData = {
   filters: Required<DashboardFilters>;
   workspaceOptions: SelectOption[];
   campaignOptions: SelectOption[];
   funnelOptions: SelectOption[];
   kpis: KpiMetrics;
+  mediaBenchmarks: DashboardMediaBenchmarks;
   timeline: TimelinePoint[];
   funnel: FunnelResult | null;
   demographics: DemographicSlice[];

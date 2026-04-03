@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FilterBar } from "@/components/dashboard/layout/filter-bar";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,8 @@ type DashboardHeaderProps = {
     startDate: string;
     endDate: string;
     campaignId: string;
+    product?: string;
+    campaignGroup?: string;
     platform: string;
     funnelId?: string;
   };
@@ -31,12 +33,59 @@ type DashboardHeaderProps = {
 const secondaryButtonClassName =
   "border border-white/10 bg-white/5 text-white hover:bg-white/10";
 
+function normalizeBracketToken(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function extractCampaignParts(name: string) {
+  const matches = [...name.matchAll(/\[([^\]]+)\]/g)].map((match) =>
+    normalizeBracketToken(match[1] ?? "")
+  );
+
+  return {
+    product: matches[0] ?? "",
+    campaignGroup: matches[1] ?? ""
+  };
+}
+
 export function DashboardHeader(props: DashboardHeaderProps) {
   const router = useRouter();
   const { isFilterVisible, isSidebarVisible, toggleFilters, toggleSidebar } =
     useDashboardUI();
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const productOptions = useMemo(() => {
+    const seen = new Set<string>();
+
+    return props.campaignOptions
+      .map((option) => extractCampaignParts(option.label).product)
+      .filter((value) => {
+        if (!value || seen.has(value)) return false;
+        seen.add(value);
+        return true;
+      })
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .map((value) => ({ value, label: value }));
+  }, [props.campaignOptions]);
+
+  const campaignGroupOptions = useMemo(() => {
+    const seen = new Set<string>();
+
+    return props.campaignOptions
+      .filter((option) => {
+        if (!props.filters.product) return true;
+        return extractCampaignParts(option.label).product === props.filters.product;
+      })
+      .map((option) => extractCampaignParts(option.label).campaignGroup)
+      .filter((value) => {
+        if (!value || seen.has(value)) return false;
+        seen.add(value);
+        return true;
+      })
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .map((value) => ({ value, label: value }));
+  }, [props.campaignOptions, props.filters.product]);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -122,6 +171,8 @@ export function DashboardHeader(props: DashboardHeaderProps) {
         <FilterBar
           workspaceOptions={props.workspaceOptions}
           campaignOptions={props.campaignOptions}
+          productOptions={productOptions}
+          campaignGroupOptions={campaignGroupOptions}
           funnelOptions={props.funnelOptions}
           filters={props.filters}
           includeFunnel={props.includeFunnel}

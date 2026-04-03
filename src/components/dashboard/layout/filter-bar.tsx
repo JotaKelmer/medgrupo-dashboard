@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,35 +11,121 @@ import type { SelectOption } from "@/lib/dashboard/types";
 type FilterBarProps = {
   workspaceOptions: SelectOption[];
   campaignOptions: SelectOption[];
+  productOptions?: SelectOption[];
+  campaignGroupOptions?: SelectOption[];
   funnelOptions?: SelectOption[];
   filters: {
     workspaceId: string;
     startDate: string;
     endDate: string;
     campaignId: string;
+    product?: string;
+    campaignGroup?: string;
     platform: string;
     funnelId?: string;
   };
   includeFunnel?: boolean;
 };
 
+function normalizeBracketToken(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function extractCampaignParts(name: string) {
+  const matches = [...name.matchAll(/\[([^\]]+)\]/g)].map((match) =>
+    normalizeBracketToken(match[1] ?? "")
+  );
+
+  return {
+    product: matches[0] ?? "",
+    campaignGroup: matches[1] ?? ""
+  };
+}
+
 export function FilterBar({
   workspaceOptions,
   campaignOptions,
+  productOptions = [],
+  campaignGroupOptions = [],
   funnelOptions = [],
   filters,
   includeFunnel = false
 }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [state, setState] = useState(filters);
+  const [state, setState] = useState({
+    ...filters,
+    product: filters.product ?? "",
+    campaignGroup: filters.campaignGroup ?? ""
+  });
 
   useEffect(() => {
-    setState(filters);
+    setState({
+      ...filters,
+      product: filters.product ?? "",
+      campaignGroup: filters.campaignGroup ?? ""
+    });
   }, [filters]);
 
+  const fallbackProductOptions = useMemo(() => {
+    const seen = new Set<string>();
+
+    return campaignOptions
+      .map((option) => extractCampaignParts(option.label).product)
+      .filter((value) => {
+        if (!value || seen.has(value)) return false;
+        seen.add(value);
+        return true;
+      })
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .map((value) => ({ value, label: value }));
+  }, [campaignOptions]);
+
+  const visibleProductOptions = productOptions.length ? productOptions : fallbackProductOptions;
+
+  const fallbackCampaignGroupOptions = useMemo(() => {
+    const seen = new Set<string>();
+
+    return campaignOptions
+      .filter((option) => {
+        if (!state.product) return true;
+        return extractCampaignParts(option.label).product === state.product;
+      })
+      .map((option) => extractCampaignParts(option.label).campaignGroup)
+      .filter((value) => {
+        if (!value || seen.has(value)) return false;
+        seen.add(value);
+        return true;
+      })
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .map((value) => ({ value, label: value }));
+  }, [campaignOptions, state.product]);
+
+  const visibleCampaignGroupOptions = campaignGroupOptions.length
+    ? campaignGroupOptions
+    : fallbackCampaignGroupOptions;
+
   function update(name: string, value: string) {
-    setState((current) => ({ ...current, [name]: value }));
+    setState((current) => {
+      if (name === "product") {
+        return {
+          ...current,
+          product: value,
+          campaignGroup: "",
+          campaignId: ""
+        };
+      }
+
+      if (name === "campaignGroup") {
+        return {
+          ...current,
+          campaignGroup: value,
+          campaignId: ""
+        };
+      }
+
+      return { ...current, [name]: value };
+    });
   }
 
   function applyFilters() {
@@ -58,8 +144,8 @@ export function FilterBar({
   return (
     <div
       className={cn(
-        "grid gap-3 rounded-3xl border border-white/8 bg-white/3 p-4 sm:grid-cols-2 xl:grid-cols-3",
-        includeFunnel ? "2xl:grid-cols-6" : "2xl:grid-cols-5"
+        "grid gap-3 rounded-3xl border border-white/8 bg-white/3 p-4 sm:grid-cols-2 xl:grid-cols-4",
+        includeFunnel ? "2xl:grid-cols-8" : "2xl:grid-cols-7"
       )}
     >
       <div className="min-w-0">
@@ -105,16 +191,35 @@ export function FilterBar({
 
       <div className="min-w-0">
         <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">
+          Produto
+        </label>
+
+        <Select
+          value={state.product}
+          onChange={(event) => update("product", event.target.value)}
+        >
+          <option value="">Todos os produtos</option>
+
+          {visibleProductOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      <div className="min-w-0">
+        <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">
           Campanha
         </label>
 
         <Select
-          value={state.campaignId}
-          onChange={(event) => update("campaignId", event.target.value)}
+          value={state.campaignGroup}
+          onChange={(event) => update("campaignGroup", event.target.value)}
         >
-          <option value="">Todas</option>
+          <option value="">Todas as campanhas</option>
 
-          {campaignOptions.map((option) => (
+          {visibleCampaignGroupOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>

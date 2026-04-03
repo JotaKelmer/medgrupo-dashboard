@@ -27,35 +27,23 @@ const groups = [
 ] as const;
 
 function toNumber(value: ValueType | undefined): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
+  if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
-
   if (Array.isArray(value) && value.length > 0) {
     const first = value[0];
-
-    if (typeof first === "number" && Number.isFinite(first)) {
-      return first;
-    }
-
+    if (typeof first === "number" && Number.isFinite(first)) return first;
     if (typeof first === "string") {
       const parsed = Number(first);
       return Number.isFinite(parsed) ? parsed : null;
     }
   }
-
   return null;
 }
 
-const tooltipFormatter: Formatter<ValueType, NameType> = (
-  value,
-  name
-) => {
+const tooltipFormatter: Formatter<ValueType, NameType> = (value, name) => {
   const numericValue = toNumber(value);
   const metricName = String(name ?? "").toLowerCase();
 
@@ -88,7 +76,7 @@ export function CreativeMapPanel({ rows }: { rows: CreativeHealthRow[] }) {
         </h2>
       </div>
 
-      <div className="h-[280px] sm:h-[320px]">
+      <div className="h-[260px] sm:h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 6, right: 6, bottom: 6, left: 6 }}>
             <CartesianGrid stroke="rgba(255,255,255,0.06)" />
@@ -133,9 +121,8 @@ export function CreativeMapPanel({ rows }: { rows: CreativeHealthRow[] }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="grid gap-2 text-sm text-white/55 sm:grid-cols-2">
-        <p>Quanto mais à direita, maior o desgaste do criativo.</p>
-        <p>Quanto mais abaixo, menor a resposta em CTR.</p>
+      <div className="grid gap-2 text-sm text-white/55">
+        <p>Quanto mais à direita, maior o desgaste. Quanto mais abaixo, menor a resposta em CTR.</p>
       </div>
     </Card>
   );

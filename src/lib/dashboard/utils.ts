@@ -25,6 +25,15 @@ export function formatPercent(value: number, digits = 2) {
   return `${(value || 0).toFixed(digits).replace(".", ",")}%`;
 }
 
+
+export function formatDecimal(value: number, digits = 2) {
+  return (value || 0).toFixed(digits).replace(".", ",");
+}
+
+export function formatMultiplier(value: number, digits = 2) {
+  return `${formatDecimal(value, digits)}x`;
+}
+
 export function toISODate(value: Date) {
   return value.toISOString().slice(0, 10);
 }

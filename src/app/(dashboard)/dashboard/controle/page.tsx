@@ -6,7 +6,7 @@ import { SyncRunsPanel } from "@/components/dashboard/sync-runs-panel";
 import { getControlOverview, parseFilters } from "@/lib/dashboard/queries";
 
 export default async function ControlePage({
-  searchParams
+  searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
@@ -22,6 +22,8 @@ export default async function ControlePage({
         campaignOptions={[]}
         filters={data.filters}
       />
+
+
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <div className="min-w-0">

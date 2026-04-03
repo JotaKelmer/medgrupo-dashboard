@@ -1,5 +1,5 @@
 import { DEFAULT_BENCHMARKS, DEFAULT_CREATIVE_RULES } from "./constants";
-import { average, percentageChange, safeDivide } from "./utils";
+import { formatCurrency, formatPercent, percentageChange } from "./utils";
 import type {
   AlertItem,
   BenchmarkValues,
@@ -45,12 +45,39 @@ const metricAccessor: Record<string, (row: DailyMetricRecord) => number> = {
   video_views_100: (row) => row.videoViews100
 };
 
+function resolvePrimaryAcquisitions(
+  leads: number,
+  messagesStarted: number,
+  results: number,
+  purchases: number
+) {
+  const directAcquisitions = leads + messagesStarted;
+  if (directAcquisitions > 0) return directAcquisitions;
+  if (purchases > 0) return purchases;
+  return results;
+}
+
+function formatRoas(value: number) {
+  return `${value.toFixed(2).replace(".", ",")}x`;
+}
+
 export function buildKpis(rows: DailyMetricRecord[]): KpiMetrics {
   const investment = rows.reduce((sum, row) => sum + row.spend, 0);
   const results = rows.reduce((sum, row) => sum + row.results, 0);
   const revenue = rows.reduce((sum, row) => sum + row.revenue, 0);
   const impressions = rows.reduce((sum, row) => sum + row.impressions, 0);
   const clicks = rows.reduce((sum, row) => sum + row.clicks, 0);
+  const linkClicks = rows.reduce((sum, row) => sum + row.linkClicks, 0);
+  const leads = rows.reduce((sum, row) => sum + row.leads, 0);
+  const messagesStarted = rows.reduce((sum, row) => sum + row.messagesStarted, 0);
+  const purchases = rows.reduce((sum, row) => sum + row.purchases, 0);
+
+  const primaryAcquisitions = resolvePrimaryAcquisitions(
+    leads,
+    messagesStarted,
+    results,
+    purchases
+  );
 
   const resultLabel =
     rows.find((row) => row.resultLabel && row.resultLabel.trim())?.resultLabel ?? "Resultado";
@@ -63,8 +90,17 @@ export function buildKpis(rows: DailyMetricRecord[]): KpiMetrics {
     revenue,
     ctr: impressions ? (clicks / impressions) * 100 : 0,
     cpm: impressions ? (investment / impressions) * 1000 : 0,
+    cpc: clicks ? investment / clicks : 0,
+    cpa: primaryAcquisitions ? investment / primaryAcquisitions : 0,
+    roas: investment ? revenue / investment : 0,
+    conversionRate: clicks ? (primaryAcquisitions / clicks) * 100 : 0,
+    primaryAcquisitions,
     impressions,
-    clicks
+    clicks,
+    linkClicks,
+    leads,
+    messagesStarted,
+    purchases
   };
 }
 
@@ -117,6 +153,70 @@ function buildCustomMetricMap(
   }
 
   return totals;
+}
+
+export function buildExecutiveFunnel(rows: DailyMetricRecord[]): FunnelResult {
+  const kpis = buildKpis(rows);
+
+  const finalLabel =
+    kpis.messagesStarted > 0 && kpis.leads > 0
+      ? "Conversas / Inscrições"
+      : kpis.messagesStarted > 0
+      ? "Conversas"
+      : kpis.leads > 0
+      ? "Inscrições"
+      : kpis.purchases > 0
+      ? "Vendas"
+      : kpis.resultLabel || "Resultado";
+
+  return {
+    id: "executive-funnel",
+    name: "Funil",
+    category: "executivo",
+    steps: [
+      {
+        id: "investment",
+        label: "Investimento",
+        value: kpis.investment,
+        valueType: "currency",
+        rateFromPrevious: null,
+        helperText: kpis.roas > 0 ? `ROAS ${formatRoas(kpis.roas)}` : "Base do período"
+      },
+      {
+        id: "impressions",
+        label: "Impressões",
+        value: kpis.impressions,
+        valueType: "number",
+        rateFromPrevious: null,
+        helperText: `CPM ${formatCurrency(kpis.cpm)}`
+      },
+      {
+        id: "clicks",
+        label: "Cliques",
+        value: kpis.clicks,
+        valueType: "number",
+        rateFromPrevious: kpis.impressions > 0 ? (kpis.clicks / kpis.impressions) * 100 : 0,
+        helperText: `CTR ${formatPercent(kpis.ctr)}`
+      },
+      {
+        id: "link-clicks",
+        label: "Cliques no link",
+        value: kpis.linkClicks,
+        valueType: "number",
+        rateFromPrevious: kpis.clicks > 0 ? (kpis.linkClicks / kpis.clicks) * 100 : 0,
+        helperText: `CPC ${formatCurrency(kpis.cpc)}`
+      },
+      {
+        id: "acquisitions",
+        label: finalLabel,
+        value: kpis.primaryAcquisitions,
+        valueType: "number",
+        rateFromPrevious:
+          kpis.linkClicks > 0 ? (kpis.primaryAcquisitions / kpis.linkClicks) * 100 : 0,
+        helperText: `Tx conversão ${formatPercent(kpis.conversionRate)}`
+      }
+    ]
+  };
 }
 
 export function buildFunnel(
