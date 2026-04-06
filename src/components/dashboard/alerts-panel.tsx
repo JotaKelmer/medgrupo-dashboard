@@ -3,23 +3,23 @@ import { Card } from "@/components/ui/card";
 import type { AlertItem } from "@/lib/dashboard/types";
 
 const variantMap = {
-  info: "info",
+  info: "good",
   warning: "warning",
   critical: "critical",
 } as const;
 
 const severityLabelMap = {
-  info: "Informação",
-  warning: "Aviso",
+  info: "Saudável",
+  warning: "Atenção",
   critical: "Crítico",
 } as const;
 
 function translateAlertText(text: string) {
   return text
-    .replace(/\bwarning\b/gi, "Aviso")
+    .replace(/\bwarning\b/gi, "Atenção")
     .replace(/\bcritical\b/gi, "Crítico")
-    .replace(/\binfo\b/gi, "Informação")
-    .replace(/\breplace\b/gi, "Trocar")
+    .replace(/\binfo\b/gi, "Saudável")
+    .replace(/\breplace\b/gi, "Crítico")
     .replace(/\bgood\b/gi, "Saudável")
     .replace(/\bsync\b/gi, "sincronização")
     .replace(/\bfatigue\b/gi, "fadiga")
@@ -35,7 +35,8 @@ export function AlertsPanel({ alerts }: { alerts: AlertItem[] }) {
           O que exige ação agora
         </h2>
         <p className="mt-2 text-sm leading-6 text-white/58">
-          Terminologia visível padronizada em português para leitura rápida da operação.
+          Status padronizados em PT-BR com leitura rápida para operação saudável,
+          atenção e criticidade.
         </p>
       </div>
 
@@ -59,7 +60,9 @@ export function AlertsPanel({ alerts }: { alerts: AlertItem[] }) {
                     </p>
                   </div>
 
-                  <Badge variant={variantMap[severity]}>{severityLabelMap[severity]}</Badge>
+                  <Badge variant={variantMap[severity]}>
+                    {severityLabelMap[severity]}
+                  </Badge>
                 </div>
               </div>
             );

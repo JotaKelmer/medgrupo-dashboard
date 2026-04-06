@@ -1,26 +1,25 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/dashboard/utils";
 
 type BadgeVariant = "good" | "warning" | "replace" | "critical" | "info";
 
 const styles: Record<BadgeVariant, string> = {
-  good: "border-[var(--color-lime)]/35 bg-[var(--color-lime)]/12 text-[var(--color-lime)]",
-  warning: "border-[var(--color-teal)]/35 bg-[var(--color-teal)]/12 text-[var(--color-teal)]",
-  replace: "border-[var(--color-purple)]/35 bg-[var(--color-purple)]/12 text-[var(--color-purple)]",
-  critical: "border-rose-400/35 bg-rose-400/12 text-rose-300",
+  good: "border-emerald-400/35 bg-emerald-500/12 text-emerald-300",
+  warning: "border-amber-400/40 bg-amber-400/12 text-amber-200",
+  replace: "border-red-400/35 bg-red-500/12 text-red-300",
+  critical: "border-red-400/35 bg-red-500/12 text-red-300",
   info: "border-white/10 bg-white/6 text-white/70",
-};
-
-type BadgeProps = {
-  children: any;
-  variant?: BadgeVariant;
-  className?: string;
 };
 
 export function Badge({
   children,
   variant = "info",
   className,
-}: BadgeProps) {
+}: {
+  children: ReactNode;
+  variant?: BadgeVariant;
+  className?: string;
+}) {
   return (
     <span
       className={cn(

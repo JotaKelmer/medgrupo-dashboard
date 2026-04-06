@@ -20,9 +20,7 @@ type DashboardHeaderProps = {
     workspaceId: string;
     startDate: string;
     endDate: string;
-    campaignId: string;
     product?: string;
-    campaignGroup?: string;
     platform: string;
     funnelId?: string;
   };
@@ -44,7 +42,6 @@ function extractCampaignParts(name: string) {
 
   return {
     product: matches[0] ?? "",
-    campaignGroup: matches[1] ?? "",
   };
 }
 
@@ -68,24 +65,6 @@ export function DashboardHeader(props: DashboardHeaderProps) {
       .sort((a, b) => a.localeCompare(b, "pt-BR"))
       .map((value) => ({ value, label: value }));
   }, [props.campaignOptions]);
-
-  const campaignGroupOptions = useMemo(() => {
-    const seen = new Set<string>();
-
-    return props.campaignOptions
-      .filter((option) => {
-        if (!props.filters.product) return true;
-        return extractCampaignParts(option.label).product === props.filters.product;
-      })
-      .map((option) => extractCampaignParts(option.label).campaignGroup)
-      .filter((value) => {
-        if (!value || seen.has(value)) return false;
-        seen.add(value);
-        return true;
-      })
-      .sort((a, b) => a.localeCompare(b, "pt-BR"))
-      .map((value) => ({ value, label: value }));
-  }, [props.campaignOptions, props.filters.product]);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -172,7 +151,6 @@ export function DashboardHeader(props: DashboardHeaderProps) {
           workspaceOptions={props.workspaceOptions}
           campaignOptions={props.campaignOptions}
           productOptions={productOptions}
-          campaignGroupOptions={campaignGroupOptions}
           filters={props.filters}
         />
       ) : null}

@@ -272,12 +272,11 @@ function buildCampaignOptionsFromCampaigns(campaigns: CampaignRecord[], activeCa
 
 function matchesCampaignGrouping(
   campaignName: string,
-  filters: Pick<Required<DashboardFilters>, "product" | "campaignGroup">
+  filters: Pick<Required<DashboardFilters>, "product">
 ) {
   const parts = extractCampaignParts(campaignName);
 
   if (filters.product && parts.product !== filters.product) return false;
-  if (filters.campaignGroup && parts.campaignGroup !== filters.campaignGroup) return false;
 
   return true;
 }
@@ -506,11 +505,9 @@ function filterRows<T extends { workspaceId: string; metricDate?: string; campai
       if (row.metricDate < filters.startDate || row.metricDate > filters.endDate) return false;
     }
 
-    if (filters.campaignId && row.campaignId && row.campaignId !== filters.campaignId) return false;
-    if (filters.campaignId && row.campaignId === null) return false;
     if (filters.platform !== "all" && row.platform && row.platform !== filters.platform) return false;
 
-    if ((filters.product || filters.campaignGroup) && campaignsById) {
+    if (filters.product && campaignsById) {
       if (!row.campaignId) return false;
       const campaign = campaignsById.get(row.campaignId);
       if (!campaign) return false;
@@ -712,7 +709,6 @@ async function getRealDailyMetrics(filters: Required<DashboardFilters>) {
     .lte("metric_date", filters.endDate)
     .order("metric_date", { ascending: true });
 
-  if (filters.campaignId) query = query.eq("campaign_id", filters.campaignId);
   if (filters.platform !== "all") query = query.eq("platform", filters.platform);
 
   const { data, error } = await query;
@@ -736,7 +732,6 @@ async function getRealDemographics(filters: Required<DashboardFilters>) {
     .lte("metric_date", filters.endDate)
     .order("metric_date", { ascending: true });
 
-  if (filters.campaignId) query = query.eq("campaign_id", filters.campaignId);
   if (filters.platform !== "all") query = query.eq("platform", filters.platform);
 
   const { data, error } = await query;
@@ -783,7 +778,6 @@ async function getRealCustomMetrics(filters: Required<DashboardFilters>) {
     .in("metric_definition_id", definitionIds)
     .order("metric_date", { ascending: true });
 
-  if (filters.campaignId) valuesQuery = valuesQuery.eq("campaign_id", filters.campaignId);
 
   const { data: valuesData, error: valuesError } = await valuesQuery;
 

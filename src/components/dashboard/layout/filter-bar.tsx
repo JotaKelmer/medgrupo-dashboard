@@ -12,15 +12,12 @@ type FilterBarProps = {
   workspaceOptions: SelectOption[];
   campaignOptions: SelectOption[];
   productOptions?: SelectOption[];
-  campaignGroupOptions?: SelectOption[];
   funnelOptions?: SelectOption[];
   filters: {
     workspaceId: string;
     startDate: string;
     endDate: string;
-    campaignId: string;
     product?: string;
-    campaignGroup?: string;
     platform: string;
     funnelId?: string;
   };
@@ -31,9 +28,7 @@ type FilterState = {
   workspaceId: string;
   startDate: string;
   endDate: string;
-  campaignId: string;
   product: string;
-  campaignGroup: string;
   platform: string;
 };
 
@@ -48,7 +43,6 @@ function extractCampaignParts(name: string) {
 
   return {
     product: matches[0] ?? "",
-    campaignGroup: matches[1] ?? "",
   };
 }
 
@@ -56,7 +50,6 @@ export function FilterBar({
   workspaceOptions,
   campaignOptions,
   productOptions = [],
-  campaignGroupOptions = [],
   filters,
 }: FilterBarProps) {
   const router = useRouter();
@@ -66,9 +59,7 @@ export function FilterBar({
     workspaceId: filters.workspaceId,
     startDate: filters.startDate,
     endDate: filters.endDate,
-    campaignId: filters.campaignId,
     product: filters.product ?? "",
-    campaignGroup: filters.campaignGroup ?? "",
     platform: filters.platform,
   });
 
@@ -77,9 +68,7 @@ export function FilterBar({
       workspaceId: filters.workspaceId,
       startDate: filters.startDate,
       endDate: filters.endDate,
-      campaignId: filters.campaignId,
       product: filters.product ?? "",
-      campaignGroup: filters.campaignGroup ?? "",
       platform: filters.platform,
     });
   }, [filters]);
@@ -98,51 +87,12 @@ export function FilterBar({
       .map((value) => ({ value, label: value }));
   }, [campaignOptions]);
 
-  const visibleProductOptions = productOptions.length ? productOptions : fallbackProductOptions;
-
-  const fallbackCampaignGroupOptions = useMemo(() => {
-    const seen = new Set<string>();
-
-    return campaignOptions
-      .filter((option) => {
-        if (!state.product) return true;
-        return extractCampaignParts(option.label).product === state.product;
-      })
-      .map((option) => extractCampaignParts(option.label).campaignGroup)
-      .filter((value) => {
-        if (!value || seen.has(value)) return false;
-        seen.add(value);
-        return true;
-      })
-      .sort((a, b) => a.localeCompare(b, "pt-BR"))
-      .map((value) => ({ value, label: value }));
-  }, [campaignOptions, state.product]);
-
-  const visibleCampaignGroupOptions = campaignGroupOptions.length
-    ? campaignGroupOptions
-    : fallbackCampaignGroupOptions;
+  const visibleProductOptions = productOptions.length
+    ? productOptions
+    : fallbackProductOptions;
 
   function update(name: keyof FilterState, value: string) {
-    setState((current) => {
-      if (name === "product") {
-        return {
-          ...current,
-          product: value,
-          campaignGroup: "",
-          campaignId: "",
-        };
-      }
-
-      if (name === "campaignGroup") {
-        return {
-          ...current,
-          campaignGroup: value,
-          campaignId: "",
-        };
-      }
-
-      return { ...current, [name]: value };
-    });
+    setState((current) => ({ ...current, [name]: value }));
   }
 
   function applyFilters() {
@@ -161,7 +111,7 @@ export function FilterBar({
   return (
     <div
       className={cn(
-        "grid gap-3 rounded-3xl border border-white/8 bg-white/3 p-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7",
+        "grid gap-3 rounded-3xl border border-white/8 bg-white/3 p-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6",
       )}
     >
       <div className="min-w-0">
@@ -217,25 +167,6 @@ export function FilterBar({
           <option value="">Todos os produtos</option>
 
           {visibleProductOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </div>
-
-      <div className="min-w-0">
-        <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">
-          Campanha
-        </label>
-
-        <Select
-          value={state.campaignGroup}
-          onChange={(event: any) => update("campaignGroup", event.target.value)}
-        >
-          <option value="">Todas as campanhas</option>
-
-          {visibleCampaignGroupOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>

@@ -1,128 +1,117 @@
-"use client";
-
-import {
-  CartesianGrid,
-  ResponsiveContainer,
-  Scatter,
-  ScatterChart,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import type {
-  Formatter,
-  NameType,
-  ValueType,
-} from "recharts/types/component/DefaultTooltipContent";
-
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import type { CreativeHealthRow } from "@/lib/dashboard/types";
-import { formatPercent } from "@/lib/dashboard/utils";
+import type { CreativeHealthRow, CreativeHealthStatus } from "@/lib/dashboard/types";
+import { formatCurrency, formatPercent } from "@/lib/dashboard/utils";
 
-const groups = [
-  { key: "good", label: "Saudáveis", color: "var(--color-lime)" },
-  { key: "warning", label: "Atenção", color: "var(--color-teal)" },
-  { key: "replace", label: "Trocar", color: "var(--color-purple)" },
-  { key: "critical", label: "Crítico", color: "#fda4af" },
-] as const;
-
-function toNumber(value: ValueType | undefined): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  if (Array.isArray(value) && value.length > 0) {
-    const first = value[0];
-    if (typeof first === "number" && Number.isFinite(first)) return first;
-    if (typeof first === "string") {
-      const parsed = Number(first);
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-  }
-  return null;
-}
-
-const tooltipFormatter: Formatter<ValueType, NameType> = (value, name) => {
-  const numericValue = toNumber(value);
-  const metricName = String(name ?? "").toLowerCase();
-
-  if (metricName === "ctr") {
-    return [formatPercent(numericValue ?? 0), "CTR"];
-  }
-
-  return [numericValue !== null ? numericValue.toFixed(1) : "-", "Frequência"];
+type Props = {
+  rows: CreativeHealthRow[];
 };
 
-export function CreativeMapPanel({ rows }: { rows: CreativeHealthRow[] }) {
-  if (!rows.length) {
-    return (
-      <Card>
-        <p className="text-sm text-white/60">
-          Nenhum dado de criativo disponível para montar o mapa visual.
-        </p>
-      </Card>
-    );
-  }
+type NormalizedStatus = "good" | "warning" | "critical";
+
+function normalizeStatus(status: CreativeHealthStatus): NormalizedStatus {
+  if (status === "replace" || status === "critical") return "critical";
+  if (status === "warning") return "warning";
+  return "good";
+}
+
+function getStatusLabel(status: CreativeHealthStatus) {
+  const normalized = normalizeStatus(status);
+
+  if (normalized === "critical") return "Crítico";
+  if (normalized === "warning") return "Atenção";
+  return "Saudável";
+}
+
+function formatFrequency(value: number) {
+  return value.toFixed(1).replace(".", ",");
+}
+
+function formatTrend(value: number) {
+  const normalized = Number.isFinite(value) ? value : 0;
+  const prefix = normalized > 0 ? "+" : "";
+  return `${prefix}${normalized.toFixed(1).replace(".", ",")}%`;
+}
+
+export function CreativeMapPanel({ rows }: Props) {
+  const visibleRows = rows.slice(0, 8);
 
   return (
     <Card className="space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-          Mapa visual
+          Mapa de criativos
         </p>
         <h2 className="mt-2 text-xl font-semibold text-white">
-          Desgaste x resposta do criativo
+          Priorização visual por criticidade
         </h2>
+        <p className="mt-2 text-sm leading-6 text-white/58">
+          Os cartões abaixo já tratam “Trocar” como “Crítico” e exibem tudo em PT-BR.
+        </p>
       </div>
 
-      <div className="h-[260px] sm:h-[300px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 6, right: 6, bottom: 6, left: 6 }}>
-            <CartesianGrid stroke="rgba(255,255,255,0.06)" />
-            <XAxis
-              type="number"
-              dataKey="frequency"
-              name="Frequência"
-              tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 12 }}
-              stroke="rgba(255,255,255,0.35)"
-            />
-            <YAxis
-              type="number"
-              dataKey="ctr"
-              name="CTR"
-              tick={{ fill: "rgba(255,255,255,0.5)", fontSize: 12 }}
-              stroke="rgba(255,255,255,0.35)"
-              tickFormatter={(value: number) => formatPercent(value)}
-            />
-            <Tooltip
-              cursor={{ strokeDasharray: "4 4" }}
-              contentStyle={{
-                background: "#121616",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 16,
-              }}
-              formatter={tooltipFormatter}
-              labelFormatter={(_, payload) => {
-                const item = payload?.[0]?.payload as CreativeHealthRow | undefined;
-                return item?.adName ?? "Criativo";
-              }}
-            />
+      <div className="grid gap-3 md:grid-cols-2">
+        {visibleRows.map((row) => {
+          const normalizedStatus = normalizeStatus(row.status);
 
-            {groups.map((group) => (
-              <Scatter
-                key={group.key}
-                name={group.label}
-                data={rows.filter((row) => row.status === group.key)}
-                fill={group.color}
-              />
-            ))}
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
+          return (
+            <div
+              key={row.adId}
+              className="rounded-2xl border border-white/8 bg-white/4 p-4"
+            >
+              <div className="flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">{row.adName}</p>
+                    <p className="mt-1 text-sm text-white/58">{row.campaignName}</p>
+                  </div>
 
-      <div className="grid gap-2 text-sm text-white/55">
-        <p>Quanto mais à direita, maior o desgaste. Quanto mais abaixo, menor a resposta em CTR.</p>
+                  <Badge variant={normalizedStatus}>{getStatusLabel(row.status)}</Badge>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="info">
+                    {row.platform === "meta" ? "Meta Ads" : "Google Ads"}
+                  </Badge>
+                  <Badge variant="info">Freq. {formatFrequency(row.frequency)}</Badge>
+                  <Badge variant="info">CTR {formatPercent(row.ctr)}</Badge>
+                  <Badge variant="info">CPR {formatCurrency(row.costPerResult)}</Badge>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-white/8 bg-black/15 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                      Tendência freq.
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-white">
+                      {formatTrend(row.frequencyTrend)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/8 bg-black/15 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                      Tendência CTR
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-white">
+                      {formatTrend(row.ctrTrend)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/8 bg-black/15 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">
+                      Tendência custo
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-white">
+                      {formatTrend(row.costTrend)}
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-sm leading-6 text-white/60">{row.recommendation}</p>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );

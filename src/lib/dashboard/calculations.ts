@@ -276,14 +276,14 @@ function classifyCreativeHealth(args: {
   if (frequency >= rules.criticalMax || (frequency >= rules.replaceMax && ctrTrend <= -15 && costTrend >= 20)) {
     return {
       status: "critical" as CreativeHealthStatus,
-      recommendation: "Saturação evidente. Trocar a peça e revisar ângulo/copy."
+      recommendation: "Criativo crítico. Substituir a peça e revisar ângulo/copy."
     };
   }
 
   if (frequency >= rules.replaceMax || (frequency >= rules.attentionMax && ctrTrend <= -8 && costTrend >= 10)) {
     return {
-      status: "replace" as CreativeHealthStatus,
-      recommendation: "Frequência alta com perda de eficiência. Substituir o criativo."
+      status: "critical" as CreativeHealthStatus,
+      recommendation: "Criativo crítico. Substituição recomendada imediatamente."
     };
   }
 
@@ -394,9 +394,9 @@ export function buildCreativeHealth(
   healthRows.sort((a, b) => {
     const priority: Record<CreativeHealthStatus, number> = {
       critical: 0,
-      replace: 1,
-      warning: 2,
-      good: 3
+      replace: 0,
+      warning: 1,
+      good: 2
     };
 
     if (priority[a.status] !== priority[b.status]) {
@@ -592,12 +592,14 @@ export function buildAlerts(args: {
 }) {
   const alerts: AlertItem[] = [];
 
-  if (args.creativeSummary.replace + args.creativeSummary.critical > 0) {
+  const criticalCount = args.creativeSummary.replace + args.creativeSummary.critical;
+
+  if (criticalCount > 0) {
     alerts.push({
       id: "creative-fatigue",
       severity: "critical",
-      title: "Criativos pedindo troca",
-      description: `${args.creativeSummary.replace + args.creativeSummary.critical} criativos já mostram saturação ou desgaste claro.`
+      title: "Criativos críticos",
+      description: `${criticalCount} criativos já pedem substituição imediata.`
     });
   }
 
@@ -610,13 +612,15 @@ export function buildAlerts(args: {
     });
   }
 
-  const topCritical = args.creativeRows.find((row) => row.status === "critical");
+  const topCritical = args.creativeRows.find(
+    (row) => row.status === "critical" || row.status === "replace"
+  );
   if (topCritical) {
     alerts.push({
       id: "critical-creative-detail",
       severity: "critical",
-      title: `Trocar ${topCritical.adName}`,
-      description: `${topCritical.campaignName}: frequência ${topCritical.frequency.toFixed(1)} com piora de CTR/custo.`
+      title: `Crítico: ${topCritical.adName}`,
+      description: `${topCritical.campaignName}: frequência ${topCritical.frequency.toFixed(1)} com piora de CTR e custo.`
     });
   }
 
@@ -646,7 +650,7 @@ export function buildAlerts(args: {
     alerts.push({
       id: "no-alerts",
       severity: "info",
-      title: "Operação estável",
+      title: "Operação saudável",
       description: "Sem alertas críticos no período selecionado."
     });
   }
