@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Funnel_Display } from "next/font/google";
 import { createClient } from "@/lib/supabase/client";
 
@@ -12,9 +12,22 @@ const funnelDisplay = Funnel_Display({
   display: "swap",
 });
 
+function getSafeNextPath(nextParam: string | null) {
+  if (!nextParam) return "/dashboard/geral";
+  if (!nextParam.startsWith("/")) return "/dashboard/geral";
+  if (nextParam.startsWith("//")) return "/dashboard/geral";
+  return nextParam;
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+
+  const nextPath = useMemo(
+    () => getSafeNextPath(searchParams.get("next")),
+    [searchParams],
+  );
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,24 +35,23 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  async function handleSubmit(event: any) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError("");
 
     const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
 
-    setLoading(false);
-
     if (signInError) {
+      setLoading(false);
       setError("Não foi possível acessar. Verifique seu e-mail e senha.");
       return;
     }
 
-    router.replace("/dashboard/geral");
+    router.replace(nextPath);
     router.refresh();
   }
 
@@ -136,10 +148,11 @@ export default function LoginPage() {
                 <input
                   type="email"
                   value={email}
-                  onChange={(event: any) => setEmail(event.target.value)}
+                  onChange={(event) => setEmail(event.target.value)}
                   placeholder="seuemail@empresa.com.br"
                   className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm outline-none transition focus:border-[#0465cd]"
                   required
+                  autoComplete="email"
                 />
               </div>
 
@@ -150,10 +163,11 @@ export default function LoginPage() {
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
-                    onChange={(event: any) => setPassword(event.target.value)}
+                    onChange={(event) => setPassword(event.target.value)}
                     placeholder="Digite sua senha"
                     className="h-12 w-full rounded-2xl border border-white/10 bg-white/5 px-4 pr-16 text-sm outline-none transition focus:border-[#0465cd]"
                     required
+                    autoComplete="current-password"
                   />
 
                   <button
@@ -185,4 +199,4 @@ export default function LoginPage() {
       </div>
     </main>
   );
-} 
+}

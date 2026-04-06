@@ -1,16 +1,29 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+
 import { Sidebar } from "@/components/dashboard/layout/sidebar";
 import { DashboardUIProvider } from "@/contexts/dashboard-ui-context";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Medgrupo Dashboard",
 };
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
   return (
     <DashboardUIProvider>
       <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(217,234,12,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_30%),linear-gradient(180deg,#0b0d14_0%,#0f1118_100%)] text-white">
