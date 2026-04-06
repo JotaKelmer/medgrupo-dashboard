@@ -10,6 +10,11 @@ import { cn } from "@/lib/dashboard/utils";
 const primaryItems = [
   { href: "/dashboard/geral", label: "Geral", icon: "◧" },
   {
+    href: "/dashboard/inteligencia-operacional",
+    label: "Inteligência Operacional",
+    icon: "◫",
+  },
+  {
     href: "https://mdg.revlabs.com.br/",
     label: "Excelência Comercial",
     icon: "↗",

@@ -35,7 +35,6 @@ type FilterState = {
   product: string;
   campaignGroup: string;
   platform: string;
-  funnelId?: string;
 };
 
 function normalizeBracketToken(value: string) {
@@ -44,7 +43,7 @@ function normalizeBracketToken(value: string) {
 
 function extractCampaignParts(name: string) {
   const matches = [...name.matchAll(/\[([^\]]+)\]/g)].map((match) =>
-    normalizeBracketToken(match[1] ?? "")
+    normalizeBracketToken(match[1] ?? ""),
   );
 
   return {
@@ -58,24 +57,30 @@ export function FilterBar({
   campaignOptions,
   productOptions = [],
   campaignGroupOptions = [],
-  funnelOptions = [],
   filters,
-  includeFunnel = false,
 }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
 
   const [state, setState] = useState<FilterState>({
-    ...filters,
+    workspaceId: filters.workspaceId,
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    campaignId: filters.campaignId,
     product: filters.product ?? "",
     campaignGroup: filters.campaignGroup ?? "",
+    platform: filters.platform,
   });
 
   useEffect(() => {
     setState({
-      ...filters,
+      workspaceId: filters.workspaceId,
+      startDate: filters.startDate,
+      endDate: filters.endDate,
+      campaignId: filters.campaignId,
       product: filters.product ?? "",
       campaignGroup: filters.campaignGroup ?? "",
+      platform: filters.platform,
     });
   }, [filters]);
 
@@ -156,8 +161,7 @@ export function FilterBar({
   return (
     <div
       className={cn(
-        "grid gap-3 rounded-3xl border border-white/8 bg-white/3 p-4 sm:grid-cols-2 xl:grid-cols-4",
-        includeFunnel ? "2xl:grid-cols-8" : "2xl:grid-cols-7"
+        "grid gap-3 rounded-3xl border border-white/8 bg-white/3 p-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7",
       )}
     >
       <div className="min-w-0">
@@ -253,27 +257,6 @@ export function FilterBar({
           <option value="google">Google Ads</option>
         </Select>
       </div>
-
-      {includeFunnel ? (
-        <div className="min-w-0">
-          <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">
-            Funil
-          </label>
-
-          <Select
-            value={state.funnelId ?? ""}
-            onChange={(event: any) => update("funnelId", event.target.value)}
-          >
-            {funnelOptions.length ? null : <option value="">Funil padrão</option>}
-
-            {funnelOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-      ) : null}
 
       <div className="flex items-end">
         <Button type="button" className="w-full" onClick={applyFilters}>

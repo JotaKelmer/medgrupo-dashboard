@@ -8,7 +8,6 @@ import {
   cn,
   formatCompact,
   formatCurrency,
-  formatMultiplier,
   formatPercent,
 } from "@/lib/dashboard/utils";
 import type { Ga4DashboardResponse } from "@/types/ga4-dashboard";
@@ -362,12 +361,6 @@ export function KpiGrid({
           `Resultados ${formatCompact(kpis.results)}`,
         ],
       },
-      {
-        label: "ROAS",
-        value: formatMultiplier(kpis.roas),
-        caption: "Receita / investimento",
-        notes: [`Receita total ${formatCurrency(kpis.revenue)}`],
-      },
     ],
     [
       googleCurrent.spend,
@@ -375,7 +368,6 @@ export function KpiGrid({
       kpis.purchases,
       kpis.results,
       kpis.revenue,
-      kpis.roas,
       metaCurrent.spend,
     ],
   );
@@ -406,7 +398,7 @@ export function KpiGrid({
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-2">
         {rowFour.map((card) => (
           <div key={card.label}>
             <KpiCard card={card} />

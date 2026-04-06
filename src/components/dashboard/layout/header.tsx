@@ -39,12 +39,12 @@ function normalizeBracketToken(value: string) {
 
 function extractCampaignParts(name: string) {
   const matches = [...name.matchAll(/\[([^\]]+)\]/g)].map((match) =>
-    normalizeBracketToken(match[1] ?? "")
+    normalizeBracketToken(match[1] ?? ""),
   );
 
   return {
     product: matches[0] ?? "",
-    campaignGroup: matches[1] ?? ""
+    campaignGroup: matches[1] ?? "",
   };
 }
 
@@ -106,7 +106,7 @@ export function DashboardHeader(props: DashboardHeaderProps) {
         <div
           className={cn(
             "flex flex-col gap-4 xl:flex-row xl:justify-between",
-            props.showBrandLogo ? "xl:items-center" : "xl:items-end"
+            props.showBrandLogo ? "xl:items-center" : "xl:items-end",
           )}
         >
           <div className="min-w-0">
@@ -173,9 +173,7 @@ export function DashboardHeader(props: DashboardHeaderProps) {
           campaignOptions={props.campaignOptions}
           productOptions={productOptions}
           campaignGroupOptions={campaignGroupOptions}
-          funnelOptions={props.funnelOptions}
           filters={props.filters}
-          includeFunnel={props.includeFunnel}
         />
       ) : null}
     </header>
