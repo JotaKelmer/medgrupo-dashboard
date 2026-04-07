@@ -9,6 +9,7 @@ import { cn } from "@/lib/dashboard/utils";
 
 const primaryItems = [
   { href: "/dashboard/geral", label: "Geral", icon: "◧" },
+  { href: "/dashboard/midia", label: "Plano de Mídia", icon: "▦" },
   {
     href: "/dashboard/inteligencia-operacional",
     label: "Inteligência Operacional",
