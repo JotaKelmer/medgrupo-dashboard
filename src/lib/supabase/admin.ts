@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createClient } from "@supabase/supabase-js";
 
 export type SupabaseClientMode = "service_role" | "public" | "missing";
@@ -30,10 +32,6 @@ function resolveServiceRoleKey() {
   return readEnv("SUPABASE_SERVICE_ROLE_KEY");
 }
 
-function resolveServerKey() {
-  return resolveServiceRoleKey() || resolvePublicKey();
-}
-
 function createRuntimeClient(key: string) {
   const url = resolveUrl();
 
@@ -45,6 +43,7 @@ function createRuntimeClient(key: string) {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
+      detectSessionInUrl: false,
     },
   });
 }
@@ -103,34 +102,34 @@ export function buildSupabaseConfigError(scope: string, requireWriteAccess = fal
   }
 
   if (requireWriteAccess) {
-    if (!diagnostics.serviceRoleConfigured && !diagnostics.publishableKeyConfigured && !diagnostics.anonKeyConfigured) {
-      missing.push(
-        "SUPABASE_SERVICE_ROLE_KEY (recomendado para escrita) ou uma chave pública configurada"
-      );
+    if (!diagnostics.serviceRoleConfigured) {
+      missing.push("SUPABASE_SERVICE_ROLE_KEY");
     }
-  } else if (!diagnostics.publishableKeyConfigured && !diagnostics.anonKeyConfigured && !diagnostics.serviceRoleConfigured) {
-    missing.push(
-      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ou NEXT_PUBLIC_SUPABASE_ANON_KEY"
-    );
+  } else if (
+    !diagnostics.publishableKeyConfigured &&
+    !diagnostics.anonKeyConfigured &&
+    !diagnostics.serviceRoleConfigured
+  ) {
+    missing.push("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ou NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
 
-  const base = missing.length
+  return missing.length
     ? `${scope}: configuração do Supabase incompleta. Faltando ${missing.join(", ")}.`
     : `${scope}: não foi possível inicializar o cliente do Supabase.`;
-
-  if (requireWriteAccess && diagnostics.clientMode === "public") {
-    return `${base} A rota está usando chave pública no servidor. Isso só funciona se o projeto permitir escrita com essa credencial; para sync estável, configure SUPABASE_SERVICE_ROLE_KEY.`;
-  }
-
-  return base;
 }
 
 export function getSupabaseServerDataClient() {
-  return createRuntimeClient(resolveServerKey());
+  const key = resolveServiceRoleKey() || resolvePublicKey();
+  return createRuntimeClient(key);
+}
+
+export function createSupabaseAdminClient() {
+  const key = resolveServiceRoleKey();
+  return createRuntimeClient(key);
 }
 
 export function getSupabaseAdmin() {
-  return createRuntimeClient(resolveServerKey());
+  return createSupabaseAdminClient();
 }
 
 export function assertSupabaseServerDataClient() {
@@ -144,10 +143,10 @@ export function assertSupabaseServerDataClient() {
 }
 
 export function assertSupabaseAdmin() {
-  const client = getSupabaseAdmin();
+  const client = createSupabaseAdminClient();
 
   if (!client) {
-    throw new Error(buildSupabaseConfigError("Sync", true));
+    throw new Error(buildSupabaseConfigError("Admin", true));
   }
 
   return client;

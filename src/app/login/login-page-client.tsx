@@ -2,9 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Funnel_Display } from "next/font/google";
 import { createClient } from "@/lib/supabase/client";
+import { DEFAULT_AFTER_LOGIN_PATH } from "@/lib/auth/constants";
+import { getSafeNextPath } from "@/lib/auth/utils";
 
 const funnelDisplay = Funnel_Display({
   subsets: ["latin"],
@@ -12,20 +15,13 @@ const funnelDisplay = Funnel_Display({
   display: "swap",
 });
 
-function getSafeNextPath(nextParam: string | null) {
-  if (!nextParam) return "/dashboard/geral";
-  if (!nextParam.startsWith("/")) return "/dashboard/geral";
-  if (nextParam.startsWith("//")) return "/dashboard/geral";
-  return nextParam;
-}
-
 export default function LoginPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
 
   const nextPath = useMemo(
-    () => getSafeNextPath(searchParams.get("next")),
+    () => getSafeNextPath(searchParams.get("next") ?? DEFAULT_AFTER_LOGIN_PATH),
     [searchParams],
   );
 
@@ -66,8 +62,8 @@ export default function LoginPageClient() {
 
         <section className="hidden flex-col justify-between bg-[radial-gradient(circle_at_top_left,_rgba(4,101,205,0.25),_transparent_35%),linear-gradient(180deg,_rgba(5,10,30,0.98),_rgba(4,8,24,0.98))] p-10 lg:flex">
           <div>
-            <div className="mb-10 flex h-14 w-44 items-center rounded-xl border border-white/10 px-4">
-              <div className="relative h-7 w-full">
+            <div className="mb-10 flex h-16 w-52 items-center rounded-xl border border-white/10 px-4">
+              <div className="relative h-9 w-full">
                 <Image
                   src="/brands/revlabs-logo.png"
                   alt="Logo Rev.Labs"
@@ -97,9 +93,9 @@ export default function LoginPageClient() {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs text-white/50">Operação integrada</p>
+              <p className="text-xs text-white/50">Segurança operacional</p>
               <p className="mt-2 text-lg font-medium">
-                Marketing, mídia e acompanhamento centralizados.
+                Controle de acessos, permissões e recuperação de senha integrados.
               </p>
             </div>
           </div>
@@ -108,8 +104,8 @@ export default function LoginPageClient() {
         <section className="p-6 sm:p-10 lg:p-12">
           <div className="mx-auto w-full max-w-md">
             <div className="mb-8 lg:hidden">
-              <div className="flex h-14 w-44 items-center rounded-xl border border-white/10 px-4">
-                <div className="relative h-7 w-full">
+              <div className="flex h-16 w-52 items-center rounded-xl border border-white/10 px-4">
+                <div className="relative h-9 w-full">
                   <Image
                     src="/brands/revlabs-logo.png"
                     alt="Logo Rev.Labs"
@@ -122,8 +118,8 @@ export default function LoginPageClient() {
             </div>
 
             <div className="mb-8">
-              <div className="mb-4 flex h-14 w-44 items-center rounded-xl border border-white/10 px-4">
-                <div className="relative h-7 w-full">
+              <div className="mb-4 flex h-16 w-52 items-center rounded-xl border border-white/10 px-4">
+                <div className="relative h-9 w-full">
                   <Image
                     src="/brands/medgrupo-logo.png"
                     alt="Logo Medgrupo"
@@ -157,7 +153,16 @@ export default function LoginPageClient() {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm text-white/70">Senha</label>
+                <div className="mb-2 flex items-center justify-between gap-4">
+                  <label className="block text-sm text-white/70">Senha</label>
+
+                  <Link
+                    href="/esqueci-minha-senha"
+                    className="text-sm text-[#7db7ff] transition hover:text-white"
+                  >
+                    Esqueci minha senha
+                  </Link>
+                </div>
 
                 <div className="relative">
                   <input

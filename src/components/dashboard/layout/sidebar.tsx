@@ -1,37 +1,82 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useDashboardUI } from "@/contexts/dashboard-ui-context";
 import { cn } from "@/lib/dashboard/utils";
+import { useAuthz } from "@/contexts/authz-context";
 
-const primaryItems = [
-  { href: "/dashboard/geral", label: "Geral", icon: "◧" },
-  { href: "/dashboard/midia", label: "Plano de Mídia", icon: "▦" },
-  {
-    href: "/dashboard/inteligencia-operacional",
-    label: "Inteligência Operacional",
-    icon: "◫",
-  },
-  {
-    href: "https://mdg.revlabs.com.br/",
-    label: "Excelência Comercial",
-    icon: "↗",
-    external: true,
-  },
-];
-
-const settingsItems = [
-  { href: "/dashboard/verba", label: "Verba", icon: "◎" },
-  { href: "/dashboard/controle", label: "Controle", icon: "⚙" },
-];
+type NavItem = {
+  href: string;
+  label: string;
+  icon: string;
+  external?: boolean;
+};
 
 export function Sidebar() {
   const pathname = usePathname();
   const { closeSidebar, isMobile, isSidebarVisible } = useDashboardUI();
+  const { permissions, role } = useAuthz();
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const isAdmin = role === "owner" || role === "admin";
+
+  const primaryItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = [];
+
+    if (permissions.geral?.canView) {
+      items.push({ href: "/dashboard/geral", label: "Geral", icon: "◧" });
+    }
+
+    if (permissions.plano_midia?.canView) {
+      items.push({
+        href: "/dashboard/midia",
+        label: "Plano de Mídia",
+        icon: "▦",
+      });
+    }
+
+    if (permissions.inteligencia_operacional?.canView) {
+      items.push({
+        href: "/dashboard/inteligencia-operacional",
+        label: "Inteligência Operacional",
+        icon: "◫",
+      });
+    }
+
+    if (permissions.excelencia_comercial?.canView) {
+      items.push({
+        href: "https://mdg.revlabs.com.br/",
+        label: "Excelência Comercial",
+        icon: "↗",
+        external: true,
+      });
+    }
+
+    return items;
+  }, [permissions]);
+
+  const settingsItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = [];
+
+    if (permissions.verbas?.canView) {
+      items.push({ href: "/dashboard/verba", label: "Verba", icon: "◎" });
+    }
+
+    if (isAdmin) {
+      items.push({
+        href: "/dashboard/usuarios",
+        label: "Usuários",
+        icon: "👤",
+      });
+    }
+
+    return items;
+  }, [permissions, isAdmin]);
+
+  const hasSettingsItems = settingsItems.length > 0;
 
   return (
     <>
@@ -103,7 +148,7 @@ export function Sidebar() {
         </nav>
 
         <div className="mt-auto pt-6">
-          {settingsOpen ? (
+          {hasSettingsItems && settingsOpen ? (
             <div className="mb-3 space-y-2 rounded-3xl border border-white/6 bg-white/3 p-3">
               {settingsItems.map((item) => {
                 const active = pathname.startsWith(item.href);
@@ -133,21 +178,23 @@ export function Sidebar() {
             </div>
           ) : null}
 
-          <button
-            type="button"
-            onClick={() => setSettingsOpen((current) => !current)}
-            className={cn(
-              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
-              settingsOpen
-                ? "bg-white/7 text-white"
-                : "text-white/65 hover:bg-white/5 hover:text-white",
-            )}
-          >
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-white/4 text-base">
-              ⚙
-            </span>
-            <span>Configurações</span>
-          </button>
+          {hasSettingsItems ? (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen((current) => !current)}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
+                settingsOpen
+                  ? "bg-white/7 text-white"
+                  : "text-white/65 hover:bg-white/5 hover:text-white",
+              )}
+            >
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-white/4 text-base">
+                ⚙
+              </span>
+              <span>Configurações</span>
+            </button>
+          ) : null}
         </div>
       </aside>
     </>

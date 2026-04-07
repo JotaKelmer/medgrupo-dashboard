@@ -1,5 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
+import { getSafeNextPath } from "@/lib/auth/utils";
+import { DEFAULT_AFTER_LOGIN_PATH } from "@/lib/auth/constants";
 
 function getSupabaseUrl() {
   return process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
@@ -13,21 +15,29 @@ function getSupabaseKey() {
   );
 }
 
+function buildRedirectResponse(request: NextRequest, pathname: string) {
+  return NextResponse.redirect(new URL(pathname, request.url));
+}
+
 export async function updateSession(request: NextRequest) {
-  const { pathname, search } = request.nextUrl;
+  const url = getSupabaseUrl();
+  const key = getSupabaseKey();
 
-  let response = NextResponse.next({
-    request,
-  });
-
-  const supabaseUrl = getSupabaseUrl();
-  const supabaseKey = getSupabaseKey();
-
-  if (!supabaseUrl || !supabaseKey) {
-    return response;
+  if (!url || !key) {
+    return NextResponse.next({
+      request: {
+        headers: request.headers,
+      },
+    });
   }
 
-  const supabase = createServerClient(supabaseUrl, supabaseKey, {
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
+
+  const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -38,7 +48,9 @@ export async function updateSession(request: NextRequest) {
         });
 
         response = NextResponse.next({
-          request,
+          request: {
+            headers: request.headers,
+          },
         });
 
         cookiesToSet.forEach(({ name, value, options }) => {
@@ -52,27 +64,29 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const pathname = request.nextUrl.pathname;
+  const search = request.nextUrl.search;
   const isDashboardRoute = pathname.startsWith("/dashboard");
-  const isLoginRoute = pathname === "/login";
+  const isAuthScreen = pathname === "/login" || pathname === "/esqueci-minha-senha";
+  const isResetPasswordRoute = pathname === "/reset-password";
 
-  if (isDashboardRoute && !user) {
+  if (!user && isDashboardRoute) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", `${pathname}${search ?? ""}`);
+    loginUrl.searchParams.set("next", `${pathname}${search}`);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isLoginRoute && user) {
-    const next = request.nextUrl.searchParams.get("next");
-    const destination =
-      next && next.startsWith("/") && !next.startsWith("//")
-        ? next
-        : "/dashboard/geral";
+  if (!user && isResetPasswordRoute) {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.searchParams.set("next", DEFAULT_AFTER_LOGIN_PATH);
+    return NextResponse.redirect(loginUrl);
+  }
 
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = destination;
-    redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+  if (user && isAuthScreen) {
+    const nextPath = getSafeNextPath(request.nextUrl.searchParams.get("next"));
+    return buildRedirectResponse(request, nextPath);
   }
 
   return response;
