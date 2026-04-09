@@ -5,52 +5,49 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import {
+  buildBusinessUnitOptionsFromProductOptions,
+  buildCampaignProductOptions,
+  getBusinessUnitForProduct,
+} from "@/lib/dashboard/constants";
 import { cn } from "@/lib/dashboard/utils";
 import type { SelectOption } from "@/lib/dashboard/types";
 
 type FilterBarProps = {
   workspaceOptions: SelectOption[];
   campaignOptions: SelectOption[];
+  buOptions?: SelectOption[];
   productOptions?: SelectOption[];
   funnelOptions?: SelectOption[];
   filters: {
     workspaceId: string;
     startDate: string;
     endDate: string;
+    bu?: string;
     product?: string;
     platform: string;
     funnelId?: string;
   };
   includeFunnel?: boolean;
+  includeBusinessUnit?: boolean;
 };
 
 type FilterState = {
   workspaceId: string;
   startDate: string;
   endDate: string;
+  bu: string;
   product: string;
   platform: string;
 };
 
-function normalizeBracketToken(value: string) {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function extractCampaignParts(name: string) {
-  const matches = [...name.matchAll(/\[([^\]]+)\]/g)].map((match) =>
-    normalizeBracketToken(match[1] ?? ""),
-  );
-
-  return {
-    product: matches[0] ?? "",
-  };
-}
-
 export function FilterBar({
   workspaceOptions,
   campaignOptions,
+  buOptions = [],
   productOptions = [],
   filters,
+  includeBusinessUnit = false,
 }: FilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -59,6 +56,7 @@ export function FilterBar({
     workspaceId: filters.workspaceId,
     startDate: filters.startDate,
     endDate: filters.endDate,
+    bu: filters.bu ?? "",
     product: filters.product ?? "",
     platform: filters.platform,
   });
@@ -68,31 +66,53 @@ export function FilterBar({
       workspaceId: filters.workspaceId,
       startDate: filters.startDate,
       endDate: filters.endDate,
+      bu: filters.bu ?? "",
       product: filters.product ?? "",
       platform: filters.platform,
     });
   }, [filters]);
 
-  const fallbackProductOptions = useMemo(() => {
-    const seen = new Set<string>();
+  const baseProductOptions = useMemo(() => {
+    if (productOptions.length) return productOptions;
+    return buildCampaignProductOptions(campaignOptions);
+  }, [campaignOptions, productOptions]);
 
-    return campaignOptions
-      .map((option) => extractCampaignParts(option.label).product)
-      .filter((value) => {
-        if (!value || seen.has(value)) return false;
-        seen.add(value);
-        return true;
-      })
-      .sort((a, b) => a.localeCompare(b, "pt-BR"))
-      .map((value) => ({ value, label: value }));
-  }, [campaignOptions]);
+  const visibleBuOptions = useMemo(() => {
+    if (!includeBusinessUnit) return [] as SelectOption[];
+    if (buOptions.length) return buOptions;
+    return buildBusinessUnitOptionsFromProductOptions(baseProductOptions);
+  }, [baseProductOptions, buOptions, includeBusinessUnit]);
 
-  const visibleProductOptions = productOptions.length
-    ? productOptions
-    : fallbackProductOptions;
+  const visibleProductOptions = useMemo(() => {
+    if (!state.bu) return baseProductOptions;
+    return baseProductOptions.filter(
+      (option) => getBusinessUnitForProduct(option.value) === state.bu,
+    );
+  }, [baseProductOptions, state.bu]);
 
   function update(name: keyof FilterState, value: string) {
-    setState((current) => ({ ...current, [name]: value }));
+    setState((current) => {
+      const next = { ...current, [name]: value };
+
+      if (name === "bu") {
+        if (
+          next.product &&
+          value &&
+          getBusinessUnitForProduct(next.product) !== value
+        ) {
+          next.product = "";
+        }
+      }
+
+      if (name === "product") {
+        const productBu = getBusinessUnitForProduct(value);
+        if (productBu) {
+          next.bu = productBu;
+        }
+      }
+
+      return next;
+    });
   }
 
   function applyFilters() {
@@ -111,7 +131,8 @@ export function FilterBar({
   return (
     <div
       className={cn(
-        "grid gap-3 rounded-3xl border border-white/8 bg-white/3 p-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6",
+        "grid gap-3 rounded-3xl border border-white/8 bg-white/3 p-4 sm:grid-cols-2 xl:grid-cols-3",
+        includeBusinessUnit ? "2xl:grid-cols-7" : "2xl:grid-cols-6",
       )}
     >
       <div className="min-w-0">
@@ -154,6 +175,24 @@ export function FilterBar({
           onChange={(event: any) => update("endDate", event.target.value)}
         />
       </div>
+
+      {includeBusinessUnit ? (
+        <div className="min-w-0">
+          <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">
+            BU
+          </label>
+
+          <Select value={state.bu} onChange={(event: any) => update("bu", event.target.value)}>
+            <option value="">Todas as BUs</option>
+
+            {visibleBuOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ) : null}
 
       <div className="min-w-0">
         <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">

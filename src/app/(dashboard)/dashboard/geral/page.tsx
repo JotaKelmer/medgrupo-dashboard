@@ -22,10 +22,10 @@ export default async function GeralPage({
         workspaceOptions={data.workspaceOptions}
         campaignOptions={data.campaignOptions}
         filters={data.filters}
+        includeBusinessUnit
         showBrandLogo
       />
 
-      {/* KPIs */}
       <KpiGrid
         kpis={data.kpis}
         mediaBenchmarks={data.mediaBenchmarks}
@@ -33,10 +33,8 @@ export default async function GeralPage({
         endDate={data.filters.endDate}
       />
 
-      {/* Timeline */}
       <TimelineChart data={data.timeline} />
 
-      {/* Funil (agora embaixo) */}
       <div className="mx-auto w-full max-w-6xl">
         <FunnelViewer kpis={data.kpis} />
       </div>

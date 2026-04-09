@@ -28,6 +28,7 @@ export type DashboardFilters = {
   campaignId?: string;
   product?: string;
   campaignGroup?: string;
+  bu?: string;
   platform?: FilterPlatform;
   funnelId?: string;
 };

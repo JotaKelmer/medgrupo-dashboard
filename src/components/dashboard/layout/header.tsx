@@ -7,6 +7,10 @@ import { FilterBar } from "@/components/dashboard/layout/filter-bar";
 import { Button } from "@/components/ui/button";
 import { useDashboardUI } from "@/contexts/dashboard-ui-context";
 import type { SelectOption } from "@/lib/dashboard/types";
+import {
+  buildCampaignBusinessUnitOptions,
+  buildCampaignProductOptions,
+} from "@/lib/dashboard/constants";
 import { cn } from "@/lib/dashboard/utils";
 import { createClient } from "@/lib/supabase/client";
 
@@ -20,30 +24,18 @@ type DashboardHeaderProps = {
     workspaceId: string;
     startDate: string;
     endDate: string;
+    bu?: string;
     product?: string;
     platform: string;
     funnelId?: string;
   };
   includeFunnel?: boolean;
+  includeBusinessUnit?: boolean;
   showBrandLogo?: boolean;
 };
 
 const secondaryButtonClassName =
   "border border-white/10 bg-white/5 text-white hover:bg-white/10";
-
-function normalizeBracketToken(value: string) {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function extractCampaignParts(name: string) {
-  const matches = [...name.matchAll(/\[([^\]]+)\]/g)].map((match) =>
-    normalizeBracketToken(match[1] ?? ""),
-  );
-
-  return {
-    product: matches[0] ?? "",
-  };
-}
 
 export function DashboardHeader(props: DashboardHeaderProps) {
   const router = useRouter();
@@ -52,19 +44,15 @@ export function DashboardHeader(props: DashboardHeaderProps) {
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const productOptions = useMemo(() => {
-    const seen = new Set<string>();
+  const productOptions = useMemo(
+    () => buildCampaignProductOptions(props.campaignOptions),
+    [props.campaignOptions],
+  );
 
-    return props.campaignOptions
-      .map((option) => extractCampaignParts(option.label).product)
-      .filter((value) => {
-        if (!value || seen.has(value)) return false;
-        seen.add(value);
-        return true;
-      })
-      .sort((a, b) => a.localeCompare(b, "pt-BR"))
-      .map((value) => ({ value, label: value }));
-  }, [props.campaignOptions]);
+  const buOptions = useMemo(
+    () => buildCampaignBusinessUnitOptions(props.campaignOptions),
+    [props.campaignOptions],
+  );
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -150,8 +138,10 @@ export function DashboardHeader(props: DashboardHeaderProps) {
         <FilterBar
           workspaceOptions={props.workspaceOptions}
           campaignOptions={props.campaignOptions}
+          buOptions={buOptions}
           productOptions={productOptions}
           filters={props.filters}
+          includeBusinessUnit={props.includeBusinessUnit}
         />
       ) : null}
     </header>

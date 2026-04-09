@@ -70,7 +70,7 @@ const campaigns: CampaignRecord[] = [
     adAccountId: metaAccountId,
     platform: "meta",
     externalId: "cmp-meta-1",
-    name: "Vestibular | Captação",
+    name: "[Preparação R+] [Captação] Vestibular | Captação",
     objective: "Cadastros",
     status: "ACTIVE"
   },
@@ -80,7 +80,7 @@ const campaigns: CampaignRecord[] = [
     adAccountId: metaAccountId,
     platform: "meta",
     externalId: "cmp-meta-2",
-    name: "Always On | WhatsApp",
+    name: "[CPMED REVALIDA] [WhatsApp] Always On | WhatsApp",
     objective: "Mensagens",
     status: "ACTIVE"
   },
@@ -90,7 +90,7 @@ const campaigns: CampaignRecord[] = [
     adAccountId: googleAccountId,
     platform: "google",
     externalId: "cmp-google-1",
-    name: "Search Brand | Leads",
+    name: "[Preparação R+] [Brand Search] Search Brand | Leads",
     objective: "Cadastros",
     status: "ACTIVE"
   }

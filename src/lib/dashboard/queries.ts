@@ -12,7 +12,13 @@ import {
   normalizeObjectives,
   toBenchmarkRecord
 } from "./calculations";
-import { DEFAULT_BENCHMARKS } from "./constants";
+import {
+  DEFAULT_BENCHMARKS,
+  extractCampaignParts,
+  getBusinessUnitSortOrder,
+  normalizeBusinessUnitValue,
+  resolveBusinessUnitProduct,
+} from "./constants";
 import { mockSnapshot } from "./mock";
 import type {
   BudgetOverviewData,
@@ -223,6 +229,9 @@ export function parseFilters(input?: Record<string, string | string[] | undefine
     campaignId: normalizeStringParam(input?.campaignId ?? input?.campaign_id),
     product: normalizeStringParam(input?.product),
     campaignGroup: normalizeStringParam(input?.campaignGroup),
+    bu: normalizeBusinessUnitValue(
+      normalizeStringParam(input?.bu ?? input?.businessUnit ?? input?.business_unit),
+    ),
     platform: normalizePlatformParam(input?.platform),
     funnelId: normalizeStringParam(input?.funnelId ?? input?.funnel_id)
   };
@@ -232,27 +241,29 @@ function mapWorkspaceOption(data: Array<{ id: string; name: string }>): SelectOp
   return data.map((item) => ({ value: item.id, label: item.name }));
 }
 
-function normalizeBracketToken(value: string) {
-  return value.trim().replace(/\s+/g, " ");
-}
+function getCampaignGrouping(name: string) {
+  const parts = extractCampaignParts(name);
+  const resolved = resolveBusinessUnitProduct(parts.product);
 
-function extractCampaignParts(name: string) {
-  const matches = [...name.matchAll(/\[([^\]]+)\]/g)].map((match) => normalizeBracketToken(match[1] ?? ""));
   return {
-    product: matches[0] ?? "",
-    campaignGroup: matches[1] ?? ""
+    product: resolved?.product ?? parts.product,
+    bu: resolved?.bu ?? "",
+    campaignGroup: parts.campaignGroup,
   };
 }
 
 function sortCampaignOptions(options: SelectOption[]) {
   return [...options].sort((a, b) => {
-    const partsA = extractCampaignParts(a.label);
-    const partsB = extractCampaignParts(b.label);
+    const groupingA = getCampaignGrouping(a.label);
+    const groupingB = getCampaignGrouping(b.label);
 
-    const productCompare = partsA.product.localeCompare(partsB.product, "pt-BR");
+    const buCompare = getBusinessUnitSortOrder(groupingA.bu) - getBusinessUnitSortOrder(groupingB.bu);
+    if (buCompare !== 0) return buCompare;
+
+    const productCompare = groupingA.product.localeCompare(groupingB.product, "pt-BR");
     if (productCompare !== 0) return productCompare;
 
-    const groupCompare = partsA.campaignGroup.localeCompare(partsB.campaignGroup, "pt-BR");
+    const groupCompare = groupingA.campaignGroup.localeCompare(groupingB.campaignGroup, "pt-BR");
     if (groupCompare !== 0) return groupCompare;
 
     return a.label.localeCompare(b.label, "pt-BR");
@@ -272,11 +283,12 @@ function buildCampaignOptionsFromCampaigns(campaigns: CampaignRecord[], activeCa
 
 function matchesCampaignGrouping(
   campaignName: string,
-  filters: Pick<Required<DashboardFilters>, "product">
+  filters: Pick<Required<DashboardFilters>, "bu" | "product">
 ) {
-  const parts = extractCampaignParts(campaignName);
+  const grouping = getCampaignGrouping(campaignName);
 
-  if (filters.product && parts.product !== filters.product) return false;
+  if (filters.bu && grouping.bu !== filters.bu) return false;
+  if (filters.product && grouping.product !== filters.product) return false;
 
   return true;
 }
@@ -459,13 +471,20 @@ function resolveFilterDefaults(
     [startDate, endDate] = [endDate, startDate];
   }
 
+  const normalizedBu = normalizeBusinessUnitValue(input.bu);
+  const normalizedProduct = normalizeStringParam(input.product) ?? "";
+  const resolvedBu = normalizedProduct
+    ? resolveBusinessUnitProduct(normalizedProduct)?.bu ?? normalizedBu
+    : normalizedBu;
+
   return {
     workspaceId: normalizeStringParam(input.workspaceId) ?? preferredWorkspaceId ?? workspaceOptions[0]?.value ?? "",
     startDate,
     endDate,
     campaignId: normalizeStringParam(input.campaignId) ?? "",
-    product: normalizeStringParam(input.product) ?? "",
+    product: resolveBusinessUnitProduct(normalizedProduct)?.product ?? normalizedProduct,
     campaignGroup: normalizeStringParam(input.campaignGroup) ?? "",
+    bu: resolvedBu,
     platform: normalizePlatformParam(input.platform) ?? "all",
     funnelId: normalizeStringParam(input.funnelId) ?? ""
   } satisfies Required<DashboardFilters>;
@@ -507,7 +526,7 @@ function filterRows<T extends { workspaceId: string; metricDate?: string; campai
 
     if (filters.platform !== "all" && row.platform && row.platform !== filters.platform) return false;
 
-    if (filters.product && campaignsById) {
+    if ((filters.bu || filters.product) && campaignsById) {
       if (!row.campaignId) return false;
       const campaign = campaignsById.get(row.campaignId);
       if (!campaign) return false;
@@ -1110,6 +1129,10 @@ async function getBudgetOverviewFromMock(filtersInput: DashboardFilters): Promis
   const resolvedFilters = { ...filters, funnelId: "" };
 
   const campaignOptions = buildMockCampaignOptions(resolvedFilters.workspaceId);
+  const campaigns = mockSnapshot.campaigns.filter(
+    (campaign) => campaign.workspaceId === resolvedFilters.workspaceId,
+  );
+  const campaignsById = buildCampaignLookup(campaigns);
   const plan = mockSnapshot.budgetPlans.find((item) => item.workspaceId === resolvedFilters.workspaceId) ?? null;
   const budgetPlan = buildBudgetState({
     workspaceId: resolvedFilters.workspaceId,
@@ -1145,7 +1168,7 @@ async function getBudgetOverviewFromMock(filtersInput: DashboardFilters): Promis
     )
   });
 
-  const dailyRows = filterRows(mockSnapshot.dailyMetrics, resolvedFilters);
+  const dailyRows = filterRows(mockSnapshot.dailyMetrics, resolvedFilters, campaignsById);
 
   return {
     filters: resolvedFilters,
@@ -1322,12 +1345,15 @@ async function getBudgetOverviewFromSupabase(filtersInput: DashboardFilters): Pr
 
   const resolvedFilters = { ...filters, funnelId: "" };
 
-  const [campaigns, activeCampaignIdsIn2026, budgetPlan, dailyRows] = await Promise.all([
+  const [campaigns, activeCampaignIdsIn2026, budgetPlan, dailyRowsRaw] = await Promise.all([
     getRealCampaigns(resolvedFilters.workspaceId),
     getRealActiveCampaignIdsIn2026(resolvedFilters.workspaceId),
     getRealBudget(resolvedFilters.workspaceId),
     getRealDailyMetrics(resolvedFilters)
   ]);
+
+  const campaignsById = buildCampaignLookup(campaigns);
+  const dailyRows = filterRows(dailyRowsRaw, resolvedFilters, campaignsById) as DailyMetricRecord[];
 
   return {
     filters: resolvedFilters,
