@@ -65,9 +65,11 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const search = request.nextUrl.search;
-  const hasAuthError = request.nextUrl.searchParams.has("error");
+
   const isDashboardRoute = pathname.startsWith("/dashboard");
-  const isAuthScreen = pathname === "/login" || pathname === "/esqueci-minha-senha";
+  const isLoginRoute = pathname === "/login";
+  const isForgotPasswordRoute = pathname === "/esqueci-minha-senha";
+  const isResetPasswordRoute = pathname === "/reset-password";
 
   if (!user && isDashboardRoute) {
     const loginUrl = request.nextUrl.clone();
@@ -76,9 +78,23 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (user && isAuthScreen && !hasAuthError) {
-    const nextPath = getSafeNextPath(request.nextUrl.searchParams.get("next"));
-    return buildRedirectResponse(request, nextPath);
+  // IMPORTANTE:
+  // não redirecionar /reset-password para /login.
+  // No fluxo de recovery/invite, a sessão pode estar sendo criada
+  // exatamente nesse momento via callback do Supabase.
+  if (user && (isLoginRoute || isForgotPasswordRoute)) {
+    const hasError = request.nextUrl.searchParams.has("error");
+
+    // Se vier erro na URL, deixa a tela abrir e não empurra para dashboard.
+    if (!hasError) {
+      const nextPath = getSafeNextPath(request.nextUrl.searchParams.get("next"));
+      return buildRedirectResponse(request, nextPath);
+    }
+  }
+
+  // /reset-password deve permanecer acessível para o fluxo concluir
+  if (isResetPasswordRoute) {
+    return response;
   }
 
   return response;
