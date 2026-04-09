@@ -951,8 +951,8 @@ export default function MidiaPage() {
         <div className="canvas-wrap">
           <header className="page-header">
             <div>
-              <p className="section-eyebrow">Plano de mídia</p>
-              <h1 className="page-title">Plano de Mídia {formatPeriodTitle(month, year)}</h1>
+              <p className="section-eyebrow">Planejamento</p>
+              <h1 className="page-title">Plano de Mídia </h1>
               <p className="page-subtitle">Visão mensal por unidade de negócio e curso</p>
             </div>
 
