@@ -69,7 +69,7 @@ async function getAppContextInternal(): Promise<AppContext | null> {
     .from("workspace_members")
     .select("id, workspace_id, user_id, role, status, is_primary, mfa_required")
     .eq("user_id", user.id)
-    .eq("status", "active")
+    .in("status", ["invited", "active"])
     .order("is_primary", { ascending: false })
     .limit(1)
     .maybeSingle();

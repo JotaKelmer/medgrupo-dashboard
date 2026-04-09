@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -15,14 +15,28 @@ const funnelDisplay = Funnel_Display({
   display: "swap",
 });
 
+function getAuthErrorMessage(errorParam: string | null) {
+  switch (errorParam) {
+    case "recovery":
+      return "O link de acesso expirou, já foi utilizado ou não pôde ser validado. Solicite um novo e-mail.";
+    case "sem-acesso":
+      return "Sua sessão foi reconhecida, mas o seu usuário ainda não possui acesso válido ao dashboard.";
+    default:
+      return "";
+  }
+}
+
 export default function LoginPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
 
+  const nextParam = searchParams.get("next");
+  const errorParam = searchParams.get("error");
+
   const nextPath = useMemo(
-    () => getSafeNextPath(searchParams.get("next") ?? DEFAULT_AFTER_LOGIN_PATH),
-    [searchParams],
+    () => getSafeNextPath(nextParam ?? DEFAULT_AFTER_LOGIN_PATH),
+    [nextParam],
   );
 
   const [email, setEmail] = useState("");
@@ -30,6 +44,10 @@ export default function LoginPageClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    setError(getAuthErrorMessage(errorParam));
+  }, [errorParam]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

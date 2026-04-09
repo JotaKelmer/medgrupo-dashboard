@@ -166,7 +166,7 @@ export async function inviteWorkspaceUser(input: {
   }
 
   const admin = assertSupabaseAdmin();
-  const redirectTo = buildAbsoluteUrl("/auth/callback?next=/reset-password");
+  const redirectTo = buildAbsoluteUrl("/auth/callback?next=/reset-password&flow=invite");
 
   const inviteResult = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
     redirectTo,
@@ -445,7 +445,7 @@ export async function sendWorkspaceUserPasswordReset(input: {
     throw new Error("Supabase não configurado para envio de e-mails de recuperação.");
   }
 
-  const redirectTo = buildAbsoluteUrl("/auth/callback?next=/reset-password");
+  const redirectTo = buildAbsoluteUrl("/auth/callback?next=/reset-password&flow=recovery");
   const resetResult = await authClient.auth.resetPasswordForEmail(email, {
     redirectTo,
   });

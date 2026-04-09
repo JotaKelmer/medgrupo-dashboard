@@ -23,9 +23,11 @@ async function loadCurrentAppContext(): Promise<AppContext | null> {
 
   const { data: member, error: memberError } = await supabase
     .from("workspace_members")
-    .select("id, workspace_id, user_id, role, status, mfa_required, is_primary, created_at, updated_at")
+    .select(
+      "id, workspace_id, user_id, role, status, mfa_required, is_primary, created_at, updated_at",
+    )
     .eq("user_id", user.id)
-    .neq("status", "removed")
+    .in("status", ["invited", "active"])
     .order("is_primary", { ascending: false })
     .order("created_at", { ascending: true })
     .limit(1)
@@ -35,23 +37,24 @@ async function loadCurrentAppContext(): Promise<AppContext | null> {
     return null;
   }
 
-  const [{ data: profile }, { data: workspace }, { data: permissionRows }] = await Promise.all([
-    supabase
-      .from("user_profiles")
-      .select("id, email, full_name, is_active")
-      .eq("id", user.id)
-      .maybeSingle(),
-    supabase
-      .from("workspaces")
-      .select("id, name, slug, is_active")
-      .eq("id", member.workspace_id)
-      .maybeSingle(),
-    supabase
-      .from("workspace_member_permissions")
-      .select("module, can_view, can_edit")
-      .eq("workspace_member_id", member.id)
-      .returns<RawPermission[]>(),
-  ]);
+  const [{ data: profile }, { data: workspace }, { data: permissionRows }] =
+    await Promise.all([
+      supabase
+        .from("user_profiles")
+        .select("id, email, full_name, is_active")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("workspaces")
+        .select("id, name, slug, is_active")
+        .eq("id", member.workspace_id)
+        .maybeSingle(),
+      supabase
+        .from("workspace_member_permissions")
+        .select("module, can_view, can_edit")
+        .eq("workspace_member_id", member.id)
+        .returns<RawPermission[]>(),
+    ]);
 
   if (!workspace) {
     return null;

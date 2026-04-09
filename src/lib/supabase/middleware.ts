@@ -1,7 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import { getSafeNextPath } from "@/lib/auth/utils";
-import { DEFAULT_AFTER_LOGIN_PATH } from "@/lib/auth/constants";
 
 function getSupabaseUrl() {
   return process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
@@ -66,9 +65,9 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const search = request.nextUrl.search;
+  const hasAuthError = request.nextUrl.searchParams.has("error");
   const isDashboardRoute = pathname.startsWith("/dashboard");
   const isAuthScreen = pathname === "/login" || pathname === "/esqueci-minha-senha";
-  const isResetPasswordRoute = pathname === "/reset-password";
 
   if (!user && isDashboardRoute) {
     const loginUrl = request.nextUrl.clone();
@@ -77,14 +76,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (!user && isResetPasswordRoute) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("next", DEFAULT_AFTER_LOGIN_PATH);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  if (user && isAuthScreen) {
+  if (user && isAuthScreen && !hasAuthError) {
     const nextPath = getSafeNextPath(request.nextUrl.searchParams.get("next"));
     return buildRedirectResponse(request, nextPath);
   }
