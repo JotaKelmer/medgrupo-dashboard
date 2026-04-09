@@ -30,7 +30,7 @@ export function Sidebar() {
     if (permissions.plano_midia?.canView) {
       items.push({
         href: "/dashboard/midia",
-        label: "Plano de Mídia",
+        label: "Planejamento",
         icon: "▦",
       });
     }
@@ -38,7 +38,7 @@ export function Sidebar() {
     if (permissions.inteligencia_operacional?.canView) {
       items.push({
         href: "/dashboard/inteligencia-operacional",
-        label: "Inteligência Operacional",
+        label: "Operações",
         icon: "◫",
       });
     }
@@ -46,7 +46,7 @@ export function Sidebar() {
     if (permissions.geral?.canView) {
       items.push({
         href: "/dashboard/geral",
-        label: "Geral",
+        label: "Performance",
         icon: "◧",
       });
     }
@@ -54,7 +54,7 @@ export function Sidebar() {
     if (permissions.excelencia_comercial?.canView) {
       items.push({
         href: "https://mdg.revlabs.com.br/",
-        label: "Excelência Comercial",
+        label: "Comercial",
         icon: "↗",
         external: true,
       });
@@ -62,7 +62,7 @@ export function Sidebar() {
 
     items.push({
       href: "#",
-      label: "Em breve",
+      label: "Execução",
       icon: "◜",
       disabled: true,
     });
