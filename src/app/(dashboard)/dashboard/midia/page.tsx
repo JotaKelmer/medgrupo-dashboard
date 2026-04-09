@@ -2,509 +2,944 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Channel = {
-  name: string;
-  tag: string;
-  budget: number;
-  color: string;
-  type: "continuous" | "weekly";
-  note?: string;
-  isHsm?: boolean;
-  baseSize?: number;
+type BUName = "R1" | "R+" | "Complementares";
+type ChannelCadence = "continuous" | "weekly";
+type ChannelId =
+  | "google-ads"
+  | "meta-ads"
+  | "whatsapp-hsm"
+  | "email-marketing"
+  | "redes-sociais-seo"
+  | "follow-up"
+  | "telao-cartaz";
+
+type WeekPlan = {
+  weekIndex: number;
+  scheduledDate: string;
+  action: string;
+  completed: boolean;
 };
 
-type ProductMeta = {
+type ChannelPlan = {
+  id: ChannelId;
+  name: string;
+  tag: string;
+  color: string;
+  cadence: ChannelCadence;
+  value: number;
+  audience: string;
+  objective: string;
+  justification: string;
+  consumption: string;
+  weeks: WeekPlan[];
+};
+
+type CourseSummary = {
+  description: string;
+  lastCampaign: string;
+  innovation: string;
+  challenge: string;
+  periodSummary: string;
+};
+
+type CourseMeta = {
   inscricoes: string;
   cpa: string;
   note: string;
 };
 
-type ProductHeader = {
-  productName: string;
-  description: string;
-  lastCampaign: string;
-  innovation: string;
-  challenge: string;
-  periodMeta: string;
-};
-
-type Product = {
+type CoursePlan = {
+  id: string;
   name: string;
-  header: ProductHeader;
+  bu: BUName;
   alert: string | null;
-  creativeWeeks: number[];
-  meta: ProductMeta;
-  channels: Channel[];
+  summary: CourseSummary;
+  meta: CourseMeta;
+  channels: ChannelPlan[];
 };
 
-const STORAGE_KEY = "medgrupo_plano_midia_produtos_v2";
-const HSM_PRICE_BRL = 0.7;
+type PeriodPlan = {
+  version: number;
+  month: number;
+  year: number;
+  courses: CoursePlan[];
+  updatedAt: string | null;
+};
 
-function hsmCost(disparoVolume: number) {
-  return Math.round(disparoVolume * HSM_PRICE_BRL);
+type LegacyProduct = {
+  name?: string;
+  alert?: string | null;
+  header?: Partial<{
+    productName: string;
+    description: string;
+    lastCampaign: string;
+    innovation: string;
+    challenge: string;
+    periodMeta: string;
+  }>;
+  meta?: Partial<{
+    inscricoes: string;
+    cpa: string;
+    note: string;
+  }>;
+  channels?: Array<
+    Partial<{
+      name: string;
+      tag: string;
+      budget: number;
+      color: string;
+      type: ChannelCadence;
+      note: string;
+    }>
+  >;
+};
+
+type ChannelTemplate = {
+  id: ChannelId;
+  name: string;
+  tag: string;
+  color: string;
+  cadence: ChannelCadence;
+  defaults: Pick<ChannelPlan, "audience" | "objective" | "justification" | "consumption" | "value">;
+};
+
+type CoursePreset = {
+  alert?: string | null;
+  summary?: Partial<CourseSummary>;
+  meta?: Partial<CourseMeta>;
+  channels?: Partial<Record<ChannelId, Partial<ChannelPlan>>>;
+};
+
+const STORAGE_PREFIX = "medgrupo_plano_midia_periodo_v3_";
+const LEGACY_STORAGE_KEY = "medgrupo_plano_midia_produtos_v2";
+const DEFAULT_MONTH = 3;
+const DEFAULT_YEAR = 2026;
+
+const MONTHS = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+const YEARS = Array.from({ length: 9 }, (_, index) => 2024 + index);
+const BU_ORDER: BUName[] = ["R1", "R+", "Complementares"];
+
+const COURSE_CATALOG: Record<BUName, string[]> = {
+  R1: [
+    "Extensivo",
+    "MEDCURSO e MED",
+    "MEDMASTER",
+    "Intensivo",
+    "INTENSIVÃO R1 + ENAMED",
+    "MED FOCO + ENAMED",
+    "ENAMED 4º ano",
+  ],
+  "R+": ["Preparação R+", "INTENSIVÃO R+", "TED", "TEGO", "INTENSIVÃO TED", "TED PRÁTICO"],
+  Complementares: [
+    "REVALIDAAÇÃO",
+    "ENCONTRO REVALIDAAÇÃO",
+    "CPMED REVALIDA",
+    "CPMED PREMIUM",
+    "CPMED EXTENSIVO",
+    "ABC da Medicina",
+    "MEDBASE PRÁTICO",
+    "MEDELETRO",
+    "MEDIMAGEM",
+    "VENTILAMED",
+    "MEDATB",
+    "PERSONAMED",
+    "MEDSoft",
+    "MEDMe",
+    "ByMed",
+    "Parceria Enamed IEs",
+    "Revisão Avançada ENAMED 4º ano",
+    "Planejamento em 3 anos",
+  ],
+};
+
+const LEGACY_NAME_MAP: Record<string, string> = {
+  "R+": "Preparação R+",
+  "CPMED Revalida": "CPMED REVALIDA",
+  "MEDBASE Prático": "MEDBASE PRÁTICO",
+  MEDMASTER: "MEDMASTER",
+  REVALIDAAÇÃO: "REVALIDAAÇÃO",
+  Extensivo: "Extensivo",
+};
+
+const CHANNEL_LIBRARY: ChannelTemplate[] = [
+  {
+    id: "google-ads",
+    name: "Google Ads",
+    tag: "Search",
+    color: "#378ADD",
+    cadence: "continuous",
+    defaults: {
+      value: 0,
+      audience: "Busca de alta intenção e termos de marca.",
+      objective: "Capturar demanda qualificada no fundo do funil.",
+      justification: "Cobrir intenção ativa e proteger a captura da demanda existente.",
+      consumption: "Mensal",
+    },
+  },
+  {
+    id: "meta-ads",
+    name: "Meta Ads",
+    tag: "Social",
+    color: "#7F77DD",
+    cadence: "continuous",
+    defaults: {
+      value: 0,
+      audience: "Públicos de interesse, remarketing e semelhantes.",
+      objective: "Gerar alcance, consideração e retargeting.",
+      justification: "Expandir cobertura de mídia e sustentar a base de conversão.",
+      consumption: "Mensal",
+    },
+  },
+  {
+    id: "whatsapp-hsm",
+    name: "WhatsApp HSM",
+    tag: "CRM",
+    color: "#1D9E75",
+    cadence: "weekly",
+    defaults: {
+      value: 0,
+      audience: "Base própria segmentada.",
+      objective: "Nutrir, reter e converter leads da base.",
+      justification: "Canal de maior proximidade para acionamento tático e recuperação.",
+      consumption: "Semanal",
+    },
+  },
+  {
+    id: "email-marketing",
+    name: "E-mail Marketing",
+    tag: "CRM",
+    color: "#EF9F27",
+    cadence: "weekly",
+    defaults: {
+      value: 0,
+      audience: "Base própria qualificada.",
+      objective: "Nutrir interesse e reforçar as mensagens de campanha.",
+      justification: "Complementa o CRM com comunicação recorrente e baixo custo.",
+      consumption: "Base própria",
+    },
+  },
+  {
+    id: "redes-sociais-seo",
+    name: "Redes Sociais/SEO",
+    tag: "Orgânico",
+    color: "#639922",
+    cadence: "continuous",
+    defaults: {
+      value: 0,
+      audience: "Audiência orgânica, comunidade e busca recorrente.",
+      objective: "Sustentar presença e autoridade da marca.",
+      justification: "Apoio descoberto, prova social e consistência de conteúdo.",
+      consumption: "Orgânico",
+    },
+  },
+  {
+    id: "follow-up",
+    name: "Follow-Up",
+    tag: "Comercial",
+    color: "#D85A30",
+    cadence: "weekly",
+    defaults: {
+      value: 0,
+      audience: "Leads quentes e oportunidades comerciais.",
+      objective: "Acelerar resposta e retomada de interessados.",
+      justification: "Reduz perdas de conversão após o primeiro contato.",
+      consumption: "Funil comercial",
+    },
+  },
+  {
+    id: "telao-cartaz",
+    name: "Telão & Cartaz",
+    tag: "Offline",
+    color: "#BA7517",
+    cadence: "weekly",
+    defaults: {
+      value: 0,
+      audience: "Fluxo presencial e pontos físicos.",
+      objective: "Reforçar visibilidade offline e apoio local.",
+      justification: "Complementa a campanha em eventos, auditórios e pontos de contato.",
+      consumption: "Pontual",
+    },
+  },
+];
+
+const COURSE_PRESETS: Partial<Record<string, CoursePreset>> = {
+  "Preparação R+": {
+    summary: {
+      description: "Preparação focada em escala, performance e conversão.",
+      lastCampaign: "Conversão com mídia paga e base ativa.",
+      innovation: "WhatsApp HSM integrado a remarketing.",
+      challenge: "Sustentar volume com CPA controlado.",
+    },
+    meta: {
+      inscricoes: "5.000",
+      cpa: "R$ 32,00",
+      note: "Meta baseada em histórico de campanha e volume de base ativa.",
+    },
+    channels: {
+      "google-ads": { value: 8000 },
+      "meta-ads": { value: 8000 },
+      "whatsapp-hsm": { value: 140000, audience: "200 mil contatos" },
+    },
+  },
+  "CPMED REVALIDA": {
+    summary: {
+      description: "Preparação para médicos formados com foco em Revalida.",
+      lastCampaign: "Captação segmentada para público qualificado.",
+      innovation: "CRM acionado sobre base de médicos formados.",
+      challenge: "Escalar um público menor com ticket maior.",
+    },
+    meta: {
+      inscricoes: "1.200",
+      cpa: "R$ 50,00",
+      note: "Público segmentado de médicos formados. Menor volume e ticket mais alto.",
+    },
+    channels: {
+      "google-ads": { value: 3000 },
+      "meta-ads": { value: 3000 },
+      "whatsapp-hsm": { value: 14000, audience: "20 mil contatos" },
+    },
+  },
+  "MEDBASE PRÁTICO": {
+    summary: {
+      description: "Produto com ativação digital e apoio prático presencial.",
+      lastCampaign: "Leads e conversão com reforço em eventos.",
+      innovation: "Integração entre mídia, CRM e presença offline.",
+      challenge: "Equilibrar geração de demanda e conversão.",
+    },
+    meta: {
+      inscricoes: "3.500",
+      cpa: "R$ 28,00",
+      note: "Meta considera geração de leads via tráfego pago e reforço presencial.",
+    },
+    channels: {
+      "google-ads": { value: 3000 },
+      "meta-ads": { value: 7000 },
+      "whatsapp-hsm": { value: 33600, audience: "48 mil contatos" },
+      "telao-cartaz": { value: 0 },
+    },
+  },
+  MEDMASTER: {
+    summary: {
+      description: "Produto premium com base qualificada e recorrência.",
+      lastCampaign: "Conversão com CRM e reforço social.",
+      innovation: "HSM sobre base ativa com apoio orgânico.",
+      challenge: "Aumentar eficiência sem perder qualificação.",
+    },
+    meta: {
+      inscricoes: "2.000",
+      cpa: "R$ 45,00",
+      note: "Base de leads qualificados com foco em eficiência de conversão.",
+    },
+    channels: {
+      "meta-ads": { value: 3000 },
+      "whatsapp-hsm": { value: 56000, audience: "80 mil contatos" },
+    },
+  },
+  REVALIDAAÇÃO: {
+    summary: {
+      description: "Configuração comercial inicial para produto em definição.",
+      lastCampaign: "Estrutura base de mídia e CRM em construção.",
+      innovation: "Modelo enxuto para ativação rápida.",
+      challenge: "Ajustar meta, base e investimento final.",
+    },
+    meta: {
+      inscricoes: "—",
+      cpa: "—",
+      note: "Configuração inicial para visualização comercial. Ajuste meta, base e orçamento conforme definição final.",
+    },
+    channels: {
+      "google-ads": { value: 3000 },
+      "meta-ads": { value: 3000 },
+      "whatsapp-hsm": { value: 14000, audience: "20 mil contatos" },
+    },
+  },
+  Extensivo: {
+    alert: "Operação 100% reativa",
+    summary: {
+      description: "Operação reativa com foco em atendimento e demanda espontânea.",
+      lastCampaign: "Demanda espontânea via WhatsApp.",
+      innovation: "Presença orgânica contínua com CRM de apoio.",
+      challenge: "Responder rápido sem operação ativa de mídia pesada.",
+    },
+    meta: {
+      inscricoes: "—",
+      cpa: "—",
+      note: "Sem meta ativa. Operação reativa voltada a absorver demanda espontânea e reativar oportunidades.",
+    },
+    channels: {
+      "whatsapp-hsm": {
+        value: 5600,
+        audience: "8 mil contatos",
+        objective: "Responder demanda espontânea e reativar oportunidades.",
+        justification: "Canal principal da operação, com acionamento conforme necessidade.",
+        consumption: "Sob demanda",
+      },
+      "redes-sociais-seo": {
+        value: 4000,
+        audience: "Audiência orgânica, comunidade e busca recorrente.",
+        objective: "Sustentar presença orgânica mínima do produto.",
+        justification: "Apoio de marca sem investimento em mídia paga pesada.",
+        consumption: "Orgânico",
+      },
+    },
+  },
+};
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
 
-function fmtBRL(v: number) {
-  if (v === 0) return "—";
-  if (v >= 1000) return "R$ " + (v / 1000).toFixed(0) + "k";
-  return "R$ " + v;
+function getCourseId(name: string) {
+  return slugify(name);
 }
 
-function fmtFull(v: number) {
-  return v.toLocaleString("pt-BR", {
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function buildStorageKey(month: number, year: number) {
+  return `${STORAGE_PREFIX}${year}-${String(month + 1).padStart(2, "0")}`;
+}
+
+function findBUByCourseName(name: string): BUName | null {
+  for (const bu of BU_ORDER) {
+    if (COURSE_CATALOG[bu].includes(name)) return bu;
+  }
+  return null;
+}
+
+function getChannelTemplate(channelId: ChannelId) {
+  return CHANNEL_LIBRARY.find((channel) => channel.id === channelId) || CHANNEL_LIBRARY[0];
+}
+
+function createWeekPlans(): WeekPlan[] {
+  return Array.from({ length: 4 }, (_, weekIndex) => ({
+    weekIndex,
+    scheduledDate: "",
+    action: "",
+    completed: false,
+  }));
+}
+
+function formatPeriodTitle(month: number, year: number) {
+  return `${MONTHS[month]} ${year}`;
+}
+
+function formatUpdatedAt(value: string | null) {
+  if (!value) return "Ainda não salvo";
+
+  return new Date(value).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatCurrency(value: number) {
+  return value.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
     maximumFractionDigits: 0,
   });
 }
 
-function formatContacts(baseSize: number) {
-  if (baseSize >= 1000 && baseSize % 1000 === 0) {
-    return baseSize / 1000 + " mil contatos";
+function formatCompactCurrency(value: number) {
+  if (value === 0) return "—";
+  if (value >= 1000) {
+    return `R$ ${(value / 1000).toFixed(value >= 10000 ? 0 : 1).replace(".0", "")}k`;
   }
-  return baseSize.toLocaleString("pt-BR") + " contatos";
+  return `R$ ${value.toLocaleString("pt-BR")}`;
 }
 
-function getLegendName(channel: Channel) {
-  if (channel.isHsm && channel.baseSize) {
-    return `WhatsApp HSM (${formatContacts(channel.baseSize)})`;
-  }
-  return channel.name;
+function parseBudget(value: string) {
+  const numeric = Number(value.replace(/[^\d.-]/g, ""));
+  if (Number.isNaN(numeric) || numeric < 0) return 0;
+  return Math.round(numeric);
 }
 
-const defaultApproach = {
-  topo: {
-    badge: "Topo",
-    text: "Awareness via vídeo e display em Redes Sociais. Tráfego Pago.",
-    channels: ["Meta Ads", "Redes Sociais"],
-  },
-  meio: {
-    badge: "Meio",
-    text: "Remarketing em Ads, e-mail marketing e disparo WhatsApp HSM.",
-    channels: ["Remarketing", "E-mail Mktg", "WhatsApp HSM"],
-  },
-  fundo: {
-    badge: "Fundo",
-    text: "Search (Google) + oferta de conversão direta ao eCommerce.",
-    channels: ["Google Ads", "Follow-Up"],
-  },
-};
+function getWeekRanges(month: number, year: number) {
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const ranges = [
+    { start: 1, end: Math.min(7, lastDay) },
+    { start: Math.min(8, lastDay), end: Math.min(14, lastDay) },
+    { start: Math.min(15, lastDay), end: Math.min(21, lastDay) },
+    { start: Math.min(22, lastDay), end: lastDay },
+  ];
 
-function getApproachItems(product: Product) {
-  if (product.name === "Extensivo") {
-    return [
-      {
-        badge: "Fundo",
-        text: "Oferta de conversão direta ao eCommerce.",
-        channels: [] as string[],
-      },
-    ];
-  }
-
-  return [defaultApproach.topo, defaultApproach.meio, defaultApproach.fundo];
+  return ranges.map((range, index) => ({
+    label: `Sem ${index + 1}`,
+    helper: `${String(range.start).padStart(2, "0")}–${String(range.end).padStart(2, "0")}`,
+  }));
 }
 
-function deepClone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function normalizeProduct(product: Product): Product {
-  const clone = deepClone(product);
-
-  clone.header = clone.header || {
-    productName: clone.name || "Produto",
-    description: "Resumo estratégico do produto.",
-    lastCampaign: "Campanha em definição.",
-    innovation: "Estrutura de inovação em definição.",
-    challenge: "Desafio estratégico em definição.",
-    periodMeta: `Período: Abril/2026 · Meta: ${clone.meta?.inscricoes || "—"} inscrições · CPA: ${clone.meta?.cpa || "—"}`,
+function getMonthBoundaries(month: number, year: number) {
+  const start = new Date(year, month, 1);
+  const end = new Date(year, month + 1, 0);
+  const toIso = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
   };
 
-  clone.header.productName = clone.header.productName || clone.name || "Produto";
-  clone.header.description = clone.header.description || "Resumo estratégico do produto.";
-  clone.header.lastCampaign = clone.header.lastCampaign || "Campanha em definição.";
-  clone.header.innovation = clone.header.innovation || "Estrutura de inovação em definição.";
-  clone.header.challenge = clone.header.challenge || "Desafio estratégico em definição.";
-  clone.header.periodMeta =
-    clone.header.periodMeta ||
-    `Período: Abril/2026 · Meta: ${clone.meta?.inscricoes || "—"} inscrições · CPA: ${clone.meta?.cpa || "—"}`;
-
-  return clone;
+  return {
+    min: toIso(start),
+    max: toIso(end),
+  };
 }
 
-const defaultProducts: Product[] = [
-  {
-    name: "R+",
-    header: {
-      productName: "R+",
-      description: "Preparação focada em escala, performance e conversão.",
-      lastCampaign: "Conversão com mídia paga e base ativa.",
-      innovation: "WhatsApp HSM integrado a remarketing.",
-      challenge: "Sustentar volume com CPA controlado.",
-      periodMeta: "Período: Abril/2026 · Meta: 5.000 inscrições · CPA: R$ 32,00",
-    },
-    alert: null,
-    creativeWeeks: [0, 2],
-    meta: {
-      inscricoes: "5.000",
-      cpa: "R$ 32,00",
-      note: "Meta baseada em histórico de campanha + volume de base ativa.",
-    },
-    channels: [
-      { name: "Google Ads", tag: "Search", budget: 8000, color: "#378ADD", type: "continuous" },
-      { name: "Meta Ads", tag: "Social", budget: 8000, color: "#7F77DD", type: "continuous" },
-      {
-        name: "WhatsApp HSM",
-        tag: "CRM",
-        budget: 140000,
-        color: "#1D9E75",
-        type: "weekly",
-        note: "200 mil contatos",
-        isHsm: true,
-        baseSize: 200000,
-      },
-      { name: "E-mail Marketing", tag: "CRM", budget: 0, color: "#EF9F27", type: "weekly", note: "base própria" },
-      { name: "Redes Sociais/SEO", tag: "Orgânico", budget: 0, color: "#639922", type: "continuous", note: "orgânico" },
-      { name: "Follow-Up", tag: "Comercial", budget: 0, color: "#D85A30", type: "weekly", note: "funil comercial" },
-    ],
-  },
-  {
-    name: "CPMED Revalida",
-    header: {
-      productName: "CPMED Revalida",
-      description: "Preparação para médicos formados com foco em Revalida.",
-      lastCampaign: "Captação segmentada para público qualificado.",
-      innovation: "CRM acionado sobre base de médicos formados.",
-      challenge: "Escalar um público menor com ticket maior.",
-      periodMeta: "Período: Abril/2026 · Meta: 1.200 inscrições · CPA: R$ 50,00",
-    },
-    alert: null,
-    creativeWeeks: [1],
-    meta: {
-      inscricoes: "1.200",
-      cpa: "R$ 50,00",
-      note: "Público segmentado de médicos formados. Menor volume, maior ticket.",
-    },
-    channels: [
-      { name: "Google Ads", tag: "Search", budget: 3000, color: "#378ADD", type: "continuous" },
-      { name: "Meta Ads", tag: "Social", budget: 3000, color: "#7F77DD", type: "continuous" },
-      {
-        name: "WhatsApp HSM",
-        tag: "CRM",
-        budget: 14000,
-        color: "#1D9E75",
-        type: "weekly",
-        note: "20 mil contatos",
-        isHsm: true,
-        baseSize: 20000,
-      },
-      { name: "E-mail Marketing", tag: "CRM", budget: 0, color: "#EF9F27", type: "weekly", note: "base própria" },
-      { name: "Redes Sociais/SEO", tag: "Orgânico", budget: 0, color: "#639922", type: "continuous", note: "orgânico" },
-    ],
-  },
-  {
-    name: "MEDBASE Prático",
-    header: {
-      productName: "MedBase",
-      description: "Produto com ativação digital e apoio prático presencial.",
-      lastCampaign: "Leads e conversão com reforço em eventos.",
-      innovation: "Integração entre mídia, CRM e presença offline.",
-      challenge: "Equilibrar geração de demanda e conversão.",
-      periodMeta: "Período: Abril/2026 · Meta: 3.500 inscrições · CPA: R$ 28,00",
-    },
-    alert: null,
-    creativeWeeks: [0, 2],
-    meta: {
-      inscricoes: "3.500",
-      cpa: "R$ 28,00",
-      note: "Meta considera geração de leads via tráfego pago + eventos presenciais (Telão).",
-    },
-    channels: [
-      { name: "Google Ads", tag: "Search", budget: 3000, color: "#378ADD", type: "continuous" },
-      { name: "Meta Ads", tag: "Social", budget: 7000, color: "#7F77DD", type: "continuous" },
-      {
-        name: "WhatsApp HSM",
-        tag: "CRM",
-        budget: 33600,
-        color: "#1D9E75",
-        type: "weekly",
-        note: "48 mil contatos",
-        isHsm: true,
-        baseSize: 48000,
-      },
-      { name: "E-mail Marketing", tag: "CRM", budget: 0, color: "#EF9F27", type: "weekly", note: "base própria" },
-      { name: "Redes Sociais/SEO", tag: "Orgânico", budget: 0, color: "#639922", type: "continuous", note: "orgânico" },
-      { name: "Telão & Cartaz", tag: "Offline", budget: 0, color: "#BA7517", type: "weekly", note: "evento/ponto" },
-    ],
-  },
-  {
-    name: "MEDMASTER",
-    header: {
-      productName: "MEDMASTER",
-      description: "Produto premium com base qualificada e recorrência.",
-      lastCampaign: "Conversão com CRM e reforço social.",
-      innovation: "HSM sobre base ativa com apoio orgânico.",
-      challenge: "Aumentar eficiência sem perder qualificação.",
-      periodMeta: "Período: Abril/2026 · Meta: 2.000 inscrições · CPA: R$ 45,00",
-    },
-    alert: null,
-    creativeWeeks: [1],
-    meta: {
-      inscricoes: "2.000",
-      cpa: "R$ 45,00",
-      note: "Base de leads qualificados. Meta ajustada ao volume de HSM ativo.",
-    },
-    channels: [
-      { name: "Meta Ads", tag: "Social", budget: 3000, color: "#7F77DD", type: "continuous" },
-      {
-        name: "WhatsApp HSM",
-        tag: "CRM",
-        budget: 56000,
-        color: "#1D9E75",
-        type: "weekly",
-        note: "80 mil contatos",
-        isHsm: true,
-        baseSize: 80000,
-      },
-      { name: "E-mail Marketing", tag: "CRM", budget: 0, color: "#EF9F27", type: "weekly", note: "base própria" },
-      { name: "Redes Sociais/SEO", tag: "Orgânico", budget: 0, color: "#639922", type: "continuous", note: "orgânico" },
-      { name: "Telão & Cartaz", tag: "Offline", budget: 0, color: "#BA7517", type: "weekly", note: "evento/ponto" },
-    ],
-  },
-  {
-    name: "Combos",
-    header: {
-      productName: "Combos",
-      description: "Oferta combinada voltada para conversão mais rápida.",
-      lastCampaign: "Campanha de oferta com apelo de valor.",
-      innovation: "Integração entre search, social e CRM.",
-      challenge: "Manter urgência comercial com boa leitura de oferta.",
-      periodMeta: "Período: Abril/2026 · Meta: 4.000 inscrições · CPA: R$ 25,00",
-    },
-    alert: null,
-    creativeWeeks: [1, 3],
-    meta: {
-      inscricoes: "4.000",
-      cpa: "R$ 25,00",
-      note: "Produto de conversão rápida. CPA mais baixo por oferta combinada.",
-    },
-    channels: [
-      { name: "Google Ads", tag: "Search", budget: 5000, color: "#378ADD", type: "continuous" },
-      { name: "Meta Ads", tag: "Social", budget: 5000, color: "#7F77DD", type: "continuous" },
-      {
-        name: "WhatsApp HSM",
-        tag: "CRM",
-        budget: 84000,
-        color: "#1D9E75",
-        type: "weekly",
-        note: "120 mil contatos",
-        isHsm: true,
-        baseSize: 120000,
-      },
-      { name: "E-mail Marketing", tag: "CRM", budget: 0, color: "#EF9F27", type: "weekly", note: "base própria" },
-      { name: "Redes Sociais/SEO", tag: "Orgânico", budget: 0, color: "#639922", type: "continuous", note: "orgânico" },
-      { name: "Telão & Cartaz", tag: "Offline", budget: 0, color: "#BA7517", type: "weekly", note: "evento/ponto" },
-    ],
-  },
-  {
-    name: "REVALIDAAÇÃO",
-    header: {
-      productName: "REVALIDAAÇÃO",
-      description: "Configuração comercial inicial para produto em definição.",
-      lastCampaign: "Estrutura base de mídia e CRM em construção.",
-      innovation: "Modelo enxuto para ativação rápida.",
-      challenge: "Ajustar meta, base e investimento final.",
-      periodMeta: "Período: Abril/2026 · Meta: — inscrições · CPA: —",
-    },
-    alert: null,
-    creativeWeeks: [1],
-    meta: {
-      inscricoes: "—",
-      cpa: "—",
-      note: "Configuração inicial para visualização comercial. Ajuste meta, base e orçamento conforme definição final.",
-    },
-    channels: [
-      { name: "Google Ads", tag: "Search", budget: 3000, color: "#378ADD", type: "continuous" },
-      { name: "Meta Ads", tag: "Social", budget: 3000, color: "#7F77DD", type: "continuous" },
-      {
-        name: "WhatsApp HSM",
-        tag: "CRM",
-        budget: 14000,
-        color: "#1D9E75",
-        type: "weekly",
-        note: "20 mil contatos",
-        isHsm: true,
-        baseSize: 20000,
-      },
-      { name: "Redes Sociais/SEO", tag: "Orgânico", budget: 0, color: "#639922", type: "continuous", note: "orgânico" },
-      { name: "E-mail Marketing", tag: "CRM", budget: 0, color: "#EF9F27", type: "weekly", note: "base própria" },
-    ],
-  },
-  {
-    name: "Extensivo",
-    header: {
-      productName: "Extensivo",
-      description: "Operação reativa com foco em atendimento e demanda espontânea.",
-      lastCampaign: "Demanda espontânea via WhatsApp.",
-      innovation: "HSM de apoio com presença orgânica.",
-      challenge: "Responder rápido sem operação ativa de mídia.",
-      periodMeta: "Período: Abril/2026 · Meta: — inscrições · CPA: —",
-    },
-    alert: "Operação 100% reativa",
-    creativeWeeks: [],
-    meta: {
-      inscricoes: "—",
-      cpa: "—",
-      note: "Sem meta ativa. Operação reativa — atende demanda espontânea via WhatsApp.",
-    },
-    channels: [
-      {
-        name: "WhatsApp HSM",
-        tag: "CRM",
-        budget: 5600,
-        color: "#1D9E75",
-        type: "weekly",
-        note: "8 mil contatos",
-        isHsm: true,
-        baseSize: 8000,
-      },
-      {
-        name: "Redes Sociais/SEO",
-        tag: "Orgânico",
-        budget: 0,
-        color: "#639922",
-        type: "continuous",
-        note: "orgânico",
-      },
-    ],
-  },
-];
+function buildDefaultCourseSummary(name: string, month: number, year: number): CourseSummary {
+  const periodLabel = `${MONTHS[month]}/${year}`;
 
-function MedgrupoLogo() {
+  return {
+    description: `${name} · planejamento mensal com visão integrada de mídia, CRM e apoio comercial.`,
+    lastCampaign: "Campanha anterior em revisão.",
+    innovation: "Planejamento integrado entre mídia, base proprietária e ativação comercial.",
+    challenge: "Ajustar pressão de investimento, consumo e entrega por canal.",
+    periodSummary: `Período: ${periodLabel} · Meta: — inscrições · CPA: —`,
+  };
+}
+
+function buildDefaultMeta(): CourseMeta {
+  return {
+    inscricoes: "—",
+    cpa: "—",
+    note: "Preencha meta e observações do curso conforme o plano vigente.",
+  };
+}
+
+function createChannelPlan(channelId: ChannelId, overrides?: Partial<ChannelPlan>): ChannelPlan {
+  const template = getChannelTemplate(channelId);
+  const normalizedWeeks = Array.isArray(overrides?.weeks)
+    ? Array.from({ length: 4 }, (_, weekIndex) => {
+        const existing = overrides?.weeks?.find((week) => week.weekIndex === weekIndex);
+        return {
+          weekIndex,
+          scheduledDate: existing?.scheduledDate || "",
+          action: existing?.action || "",
+          completed: Boolean(existing?.completed),
+        };
+      })
+    : createWeekPlans();
+
+  return {
+    id: template.id,
+    name: template.name,
+    tag: template.tag,
+    color: template.color,
+    cadence: template.cadence,
+    value: template.defaults.value,
+    audience: template.defaults.audience,
+    objective: template.defaults.objective,
+    justification: template.defaults.justification,
+    consumption: template.defaults.consumption,
+    ...deepClone(overrides || {}),
+    weeks: normalizedWeeks,
+  };
+}
+
+function ensureCourseChannels(channels: ChannelPlan[]) {
+  const byId = new Map(channels.map((channel) => [channel.id, channel]));
+
+  return CHANNEL_LIBRARY.map((template) => {
+    const existing = byId.get(template.id);
+    return existing ? createChannelPlan(template.id, existing) : createChannelPlan(template.id);
+  });
+}
+
+function createCoursePlan(name: string, bu: BUName, month: number, year: number): CoursePlan {
+  const preset = COURSE_PRESETS[name];
+  const summary = {
+    ...buildDefaultCourseSummary(name, month, year),
+    ...(preset?.summary || {}),
+  };
+  const meta = {
+    ...buildDefaultMeta(),
+    ...(preset?.meta || {}),
+  };
+  summary.periodSummary =
+    preset?.summary?.periodSummary || `Período: ${MONTHS[month]}/${year} · Meta: ${meta.inscricoes} inscrições · CPA: ${meta.cpa}`;
+
+  return {
+    id: getCourseId(name),
+    name,
+    bu,
+    alert: preset?.alert || null,
+    summary,
+    meta,
+    channels: ensureCourseChannels(
+      CHANNEL_LIBRARY.map((channel) => createChannelPlan(channel.id, preset?.channels?.[channel.id]))
+    ),
+  };
+}
+
+function createPeriodPlan(month: number, year: number): PeriodPlan {
+  const courses = BU_ORDER.flatMap((bu) => COURSE_CATALOG[bu].map((name) => createCoursePlan(name, bu, month, year)));
+
+  return {
+    version: 3,
+    month,
+    year,
+    courses,
+    updatedAt: null,
+  };
+}
+
+function normalizeChannelIdFromName(value?: string): ChannelId | null {
+  const normalized = slugify(value || "");
+  const map: Record<string, ChannelId> = {
+    "google-ads": "google-ads",
+    "meta-ads": "meta-ads",
+    "whatsapp-hsm": "whatsapp-hsm",
+    "e-mail-marketing": "email-marketing",
+    "email-marketing": "email-marketing",
+    "redes-sociais-seo": "redes-sociais-seo",
+    "follow-up": "follow-up",
+    "telao-cartaz": "telao-cartaz",
+    "telao-cartaz-evento-ponto": "telao-cartaz",
+  };
+
+  return map[normalized] || null;
+}
+
+function normalizeStoredCourse(raw: Partial<CoursePlan>, month: number, year: number): CoursePlan | null {
+  const name = typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : "";
+  const bu = raw.bu && BU_ORDER.includes(raw.bu) ? raw.bu : findBUByCourseName(name);
+  if (!name || !bu) return null;
+
+  const fallback = createCoursePlan(name, bu, month, year);
+  const storedChannels = Array.isArray(raw.channels)
+    ? raw.channels
+        .map((channel) => {
+          const channelId = normalizeChannelIdFromName(channel?.id || channel?.name);
+          if (!channelId) return null;
+          return createChannelPlan(channelId, channel);
+        })
+        .filter(Boolean) as ChannelPlan[]
+    : [];
+
+  return {
+    ...fallback,
+    ...raw,
+    name,
+    bu,
+    summary: {
+      ...fallback.summary,
+      ...(raw.summary || {}),
+      periodSummary:
+        raw.summary?.periodSummary ||
+        `Período: ${MONTHS[month]}/${year} · Meta: ${(raw.meta?.inscricoes || fallback.meta.inscricoes) ?? "—"} inscrições · CPA: ${(raw.meta?.cpa || fallback.meta.cpa) ?? "—"}`,
+    },
+    meta: {
+      ...fallback.meta,
+      ...(raw.meta || {}),
+    },
+    alert: raw.alert ?? fallback.alert,
+    channels: ensureCourseChannels(storedChannels.length ? storedChannels : fallback.channels),
+  };
+}
+
+function normalizeStoredPlan(raw: Partial<PeriodPlan> | null | undefined, month: number, year: number): PeriodPlan {
+  const fallback = createPeriodPlan(month, year);
+  if (!raw || !Array.isArray(raw.courses)) return fallback;
+
+  const coursesById = new Map(
+    raw.courses
+      .map((course) => normalizeStoredCourse(course, month, year))
+      .filter(Boolean)
+      .map((course) => [course!.id, course!])
+  );
+
+  return {
+    version: 3,
+    month,
+    year,
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : null,
+    courses: fallback.courses.map((course) => coursesById.get(course.id) || course),
+  };
+}
+
+function migrateLegacyProducts(legacy: LegacyProduct[] | null | undefined, month: number, year: number): PeriodPlan | null {
+  if (!Array.isArray(legacy) || !legacy.length) return null;
+
+  const next = createPeriodPlan(month, year);
+  const nextCourses = next.courses.map((course) => {
+    const legacyCourse = legacy.find((item) => {
+      const mappedName = LEGACY_NAME_MAP[item.name || ""] || item.name || "";
+      return mappedName === course.name;
+    });
+
+    if (!legacyCourse) return course;
+
+    const incomingChannels = Array.isArray(legacyCourse.channels)
+      ? legacyCourse.channels
+          .map((channel) => {
+            const channelId = normalizeChannelIdFromName(channel.name);
+            if (!channelId) return null;
+            return createChannelPlan(channelId, {
+              value: typeof channel.budget === "number" ? channel.budget : 0,
+              cadence: channel.type || getChannelTemplate(channelId).cadence,
+              consumption: channel.note || getChannelTemplate(channelId).defaults.consumption,
+            });
+          })
+          .filter(Boolean) as ChannelPlan[]
+      : [];
+
+    return {
+      ...course,
+      alert: legacyCourse.alert ?? course.alert,
+      summary: {
+        ...course.summary,
+        description: legacyCourse.header?.description || course.summary.description,
+        lastCampaign: legacyCourse.header?.lastCampaign || course.summary.lastCampaign,
+        innovation: legacyCourse.header?.innovation || course.summary.innovation,
+        challenge: legacyCourse.header?.challenge || course.summary.challenge,
+        periodSummary:
+          legacyCourse.header?.periodMeta ||
+          `Período: ${MONTHS[month]}/${year} · Meta: ${legacyCourse.meta?.inscricoes || course.meta.inscricoes} inscrições · CPA: ${legacyCourse.meta?.cpa || course.meta.cpa}`,
+      },
+      meta: {
+        ...course.meta,
+        inscricoes: legacyCourse.meta?.inscricoes || course.meta.inscricoes,
+        cpa: legacyCourse.meta?.cpa || course.meta.cpa,
+        note: legacyCourse.meta?.note || course.meta.note,
+      },
+      channels: ensureCourseChannels(incomingChannels.length ? incomingChannels : course.channels),
+    };
+  });
+
+  return {
+    version: 3,
+    month,
+    year,
+    courses: nextCourses,
+    updatedAt: null,
+  };
+}
+
+function readPeriodPlan(month: number, year: number): PeriodPlan {
+  const fallback = createPeriodPlan(month, year);
+
+  if (typeof window === "undefined") return fallback;
+
+  try {
+    const raw = localStorage.getItem(buildStorageKey(month, year));
+    if (raw) {
+      return normalizeStoredPlan(JSON.parse(raw), month, year);
+    }
+  } catch (error) {
+    console.warn("Não foi possível carregar o plano salvo do período.", error);
+  }
+
+  if (month === DEFAULT_MONTH && year === DEFAULT_YEAR) {
+    try {
+      const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacyRaw) {
+        const migrated = migrateLegacyProducts(JSON.parse(legacyRaw), month, year);
+        if (migrated) return migrated;
+      }
+    } catch (error) {
+      console.warn("Não foi possível migrar o storage legado do plano.", error);
+    }
+  }
+
+  return fallback;
+}
+
+function savePeriodPlan(plan: PeriodPlan) {
+  if (typeof window === "undefined") return;
+
+  localStorage.setItem(buildStorageKey(plan.month, plan.year), JSON.stringify(plan));
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  textarea,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  textarea?: boolean;
+  className?: string;
+}) {
   return (
-    <div className="header-banner-logo">
-      <div className="header-banner-logo__icon">
-        <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" viewBox="0 0 40 40">
-          <circle cx="20" cy="20" r="17.2" fill="none" stroke="var(--color-lime)" strokeWidth="2.2"></circle>
-          <g transform="translate(4 4)">
-            <path
-              stroke="var(--color-lime)"
-              fill="none"
-              strokeLinejoin="miter"
-              strokeLinecap="square"
-              strokeMiterlimit="4"
-              strokeWidth="2.6"
-              d="M22 3.333v6.667h6.667M18 3.333v6.667M10 3.333v6.667h-6.667M14 3.333v6.667M22 28.667v-6.667h6.667M10 28.667v-6.667h-6.667M14 22v6.667M18 22v6.667M28.666 14h-6.667M10 14h-6.667M28.666 18h-6.667M10 18h-6.667M14 14h0.013M18 14h0.013M18 18h0.013M14 18h0.013"
-            ></path>
-          </g>
-        </svg>
-      </div>
-
-      <div className="header-banner-logo__icon-text">
-        <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" viewBox="0 0 248 32">
-          <path d="M26.1 2.026c0.288-0.35 0.518-0.555 0.691-0.613 0.173-0.088 0.46-0.131 0.863-0.131h5.395v29.032h-6.905v-18.435l-6.56 8.232h-4.057c-0.316 0-0.561-0.029-0.734-0.088s-0.345-0.204-0.518-0.438l-6.042-7.707v18.435h-6.819v-29.032h5.697c0.403 0 0.676 0.029 0.82 0.088 0.173 0.058 0.403 0.277 0.691 0.657l8.718 11.035h0.129l8.632-11.035z"></path>
-          <path d="M60.254 1.282v5.999h-14.587v5.386h13.293v5.912h-13.293v5.737h14.976v5.999h-22.14v-29.032h21.752z"></path>
-          <path d="M65.561 30.314v-29.032h10.315c2.82 0 5.294 0.307 7.423 0.92 2.129 0.584 3.942 1.533 5.438 2.846 1.352 1.197 2.374 2.686 3.064 4.467 0.719 1.781 1.079 3.883 1.079 6.306s-0.36 4.525-1.079 6.306c-0.69 1.781-1.712 3.27-3.064 4.467-1.496 1.314-3.323 2.262-5.481 2.846-2.129 0.584-4.604 0.876-7.423 0.876h-10.272zM72.725 24.008h2.935c1.726 0 3.222-0.117 4.488-0.35s2.302-0.715 3.107-1.445c0.691-0.642 1.208-1.474 1.554-2.496 0.374-1.051 0.561-2.35 0.561-3.897 0-3.007-0.705-5.153-2.115-6.437-0.806-0.73-1.841-1.212-3.107-1.445s-2.762-0.35-4.488-0.35h-2.935v16.421z"></path>
-          <path d="M116.985 19.673h-4.186v-4.948h10.056c0.432 0 0.719 0.073 0.863 0.219 0.173 0.146 0.259 0.423 0.259 0.832v14.538h-5.006l-1.122-2.54-2.158 1.226c-1.007 0.584-2.014 1.022-3.021 1.314-1.007 0.321-2.1 0.467-3.28 0.438-2.129 0-4.042-0.38-5.74-1.139s-3.151-1.81-4.359-3.153c-1.18-1.343-2.086-2.919-2.719-4.729-0.633-1.839-0.949-3.81-0.949-5.912 0-2.306 0.388-4.379 1.165-6.218 0.806-1.868 1.87-3.445 3.194-4.729 1.352-1.314 2.92-2.306 4.704-2.978 1.784-0.701 3.668-1.051 5.654-1.051 1.496 0 2.906 0.19 4.23 0.569 1.352 0.379 2.575 0.92 3.668 1.62s2.057 1.533 2.892 2.496c0.834 0.963 1.482 2.014 1.942 3.153l-4.316 3.065-4.057-2.671c-0.921-0.613-1.741-1.022-2.46-1.226-0.691-0.234-1.482-0.35-2.374-0.35-0.921 0-1.798 0.175-2.633 0.525-0.806 0.35-1.51 0.861-2.115 1.533s-1.093 1.533-1.467 2.584c-0.345 1.022-0.518 2.204-0.518 3.547 0 2.832 0.662 4.919 1.985 6.262 1.323 1.314 3.222 1.971 5.697 1.971 0.863 0 1.827-0.073 2.892-0.219 1.065-0.175 1.942-0.394 2.633-0.657 0.259-0.088 0.432-0.19 0.518-0.307s0.13-0.306 0.13-0.569v-2.496z"></path>
-          <path d="M136.324 30.314h-7.164v-29.032h12.127c2.388 0 4.388 0.219 5.999 0.657s2.92 1.139 3.927 2.102c1.611 1.635 2.417 3.897 2.417 6.787 0 2.014-0.46 3.78-1.381 5.299-0.892 1.489-2.014 2.671-3.366 3.547l6.474 10.641h-7.164c-0.345 0-0.604-0.044-0.777-0.131-0.173-0.117-0.331-0.306-0.475-0.569l-4.575-7.794c-0.201-0.321-0.36-0.511-0.475-0.569s-0.374-0.088-0.777-0.088h-4.79v9.152zM144.006 15.25c0.374 0 0.676-0.044 0.906-0.131s0.446-0.292 0.647-0.613c0.259-0.409 0.446-0.92 0.561-1.533 0.144-0.642 0.216-1.255 0.216-1.839 0-0.671-0.086-1.241-0.259-1.708-0.173-0.496-0.403-0.876-0.69-1.139-0.374-0.35-0.878-0.584-1.511-0.701-0.633-0.146-1.453-0.219-2.46-0.219h-5.093v7.882h7.682z"></path>
-          <path d="M184.85 18.009c0 4.175-1.079 7.298-3.237 9.371-1.151 1.109-2.546 1.956-4.186 2.54-1.64 0.555-3.525 0.832-5.654 0.832-4.258 0-7.538-1.124-9.84-3.372-1.122-1.109-1.956-2.408-2.503-3.897-0.518-1.518-0.777-3.343-0.777-5.474v-16.728h7.164v16.728c0 0.993 0.086 1.854 0.259 2.584 0.201 0.73 0.518 1.314 0.95 1.752 0.489 0.467 1.151 0.817 1.985 1.051 0.834 0.204 1.784 0.306 2.848 0.306s2-0.102 2.805-0.306c0.806-0.234 1.453-0.584 1.942-1.051 0.46-0.438 0.777-1.022 0.949-1.752 0.201-0.73 0.288-1.591 0.259-2.584v-16.728h7.035v16.728z"></path>
-          <path d="M197.057 30.314h-7.164v-29.032h11.911c4 0 7.050 0.774 9.15 2.321 2.1 1.518 3.15 4.087 3.15 7.707 0 3.299-0.906 5.853-2.718 7.663-1.784 1.781-4.618 2.671-8.502 2.671h-5.827v8.67zM204.566 15.732c0.404 0 0.706-0.044 0.906-0.131 0.23-0.117 0.462-0.35 0.692-0.701 0.23-0.409 0.402-0.963 0.518-1.664 0.114-0.73 0.172-1.387 0.172-1.971 0-1.372-0.288-2.35-0.864-2.934-0.402-0.409-0.92-0.671-1.554-0.788-0.632-0.117-1.496-0.175-2.588-0.175h-4.791v8.364h7.509z"></path>
-          <path d="M246.224 15.82c0 2.277-0.402 4.335-1.208 6.174-0.776 1.839-1.842 3.416-3.194 4.729-1.324 1.284-2.876 2.277-4.66 2.978-1.756 0.701-3.626 1.051-5.612 1.051-1.984 0-3.87-0.35-5.652-1.051-1.756-0.701-3.31-1.693-4.662-2.978-1.324-1.314-2.388-2.89-3.194-4.729-0.776-1.839-1.164-3.897-1.164-6.174s0.388-4.335 1.164-6.174c0.806-1.839 1.87-3.416 3.194-4.729 1.352-1.314 2.906-2.321 4.662-3.021 1.782-0.701 3.668-1.051 5.652-1.051 1.986 0 3.856 0.35 5.612 1.051 1.784 0.701 3.336 1.708 4.66 3.021 1.352 1.314 2.418 2.89 3.194 4.729 0.806 1.839 1.208 3.897 1.208 6.174zM238.716 15.82c0-2.627-0.634-4.598-1.9-5.912s-3.020-1.971-5.266-1.971c-2.272 0-4.042 0.657-5.308 1.971-1.236 1.314-1.856 3.284-1.856 5.912 0 2.657 0.62 4.627 1.856 5.912 1.266 1.284 3.036 1.927 5.308 1.927 2.246 0 4-0.642 5.266-1.927 1.266-1.314 1.9-3.284 1.9-5.912z"></path>
-        </svg>
-      </div>
-    </div>
+    <label className={`field-wrap ${className || ""}`.trim()}>
+      <span className="field-label">{label}</span>
+      {textarea ? (
+        <textarea className="field-control field-control--textarea" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      ) : (
+        <input className="field-control" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+      )}
+    </label>
   );
 }
 
 export default function MidiaPage() {
-  const [products, setProducts] = useState<Product[]>(defaultProducts.map(normalizeProduct));
-  const [active, setActive] = useState(6);
   const [mounted, setMounted] = useState(false);
+  const [month, setMonth] = useState(DEFAULT_MONTH);
+  const [year, setYear] = useState(DEFAULT_YEAR);
+  const [plan, setPlan] = useState<PeriodPlan>(() => createPeriodPlan(DEFAULT_MONTH, DEFAULT_YEAR));
+  const [activeBU, setActiveBU] = useState<BUName>("R1");
+  const [activeCourseId, setActiveCourseId] = useState(getCourseId(COURSE_CATALOG.R1[0]));
+  const [notice, setNotice] = useState("Autossalvo no navegador");
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length) {
-          setProducts(parsed.map(normalizeProduct));
-        }
-      }
-    } catch (error) {
-      console.warn("Não foi possível carregar os dados salvos.", error);
-    } finally {
-      setMounted(true);
-    }
+    setMounted(true);
   }, []);
 
-  const activeProduct = useMemo(() => normalizeProduct(products[active]), [products, active]);
-  const approachItems = useMemo(() => getApproachItems(activeProduct), [activeProduct]);
+  useEffect(() => {
+    if (!mounted) return;
+    setPlan(readPeriodPlan(month, year));
+  }, [mounted, month, year]);
 
-  const paidChannels = useMemo(
-    () => activeProduct.channels.filter((channel) => channel.budget > 0),
-    [activeProduct.channels]
-  );
+  useEffect(() => {
+    if (!mounted) return;
 
-  const total = useMemo(
-    () => paidChannels.reduce((sum, channel) => sum + channel.budget, 0),
-    [paidChannels]
-  );
+    const coursesForBU = plan.courses.filter((course) => course.bu === activeBU);
+    if (!coursesForBU.length) return;
 
-  const maxBudget = useMemo(
-    () => Math.max(...paidChannels.map((channel) => channel.budget), 1),
-    [paidChannels]
-  );
-
-  function persist(nextProducts: Product[]) {
-    setProducts(nextProducts);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextProducts));
-    } catch (error) {
-      console.warn("Não foi possível salvar os dados.", error);
+    const hasActive = coursesForBU.some((course) => course.id === activeCourseId);
+    if (!hasActive) {
+      setActiveCourseId(coursesForBU[0].id);
     }
+  }, [activeBU, activeCourseId, mounted, plan.courses]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    document.title = `Plano de Mídia ${formatPeriodTitle(month, year)}`;
+  }, [mounted, month, year]);
+
+  const coursesForBU = useMemo(
+    () => plan.courses.filter((course) => course.bu === activeBU),
+    [activeBU, plan.courses]
+  );
+
+  const activeCourse = useMemo(() => {
+    return coursesForBU.find((course) => course.id === activeCourseId) || coursesForBU[0] || plan.courses[0];
+  }, [activeCourseId, coursesForBU, plan.courses]);
+
+  const totalInvestment = useMemo(() => {
+    if (!activeCourse) return 0;
+    return activeCourse.channels.reduce((sum, channel) => sum + channel.value, 0);
+  }, [activeCourse]);
+
+  const maxChannelValue = useMemo(() => {
+    if (!activeCourse) return 1;
+    return Math.max(...activeCourse.channels.map((channel) => channel.value), 1);
+  }, [activeCourse]);
+
+  const weekRanges = useMemo(() => getWeekRanges(month, year), [month, year]);
+  const monthBoundaries = useMemo(() => getMonthBoundaries(month, year), [month, year]);
+
+  function commitPlan(nextPlan: PeriodPlan, nextNotice?: string) {
+    const payload = {
+      ...nextPlan,
+      updatedAt: new Date().toISOString(),
+    };
+    setPlan(payload);
+    savePeriodPlan(payload);
+    if (nextNotice) setNotice(nextNotice);
   }
 
-  function updateHeaderField(field: keyof ProductHeader, value: string) {
-    const next = [...products];
-    next[active] = normalizeProduct(next[active]);
-    next[active].header[field] = value.replace(/\u00a0/g, " ").trim();
-    persist(next);
+  function updateCourse(updater: (course: CoursePlan) => CoursePlan, nextNotice?: string) {
+    if (!activeCourse) return;
+
+    const nextPlan: PeriodPlan = {
+      ...plan,
+      courses: plan.courses.map((course) => (course.id === activeCourse.id ? updater(deepClone(course)) : course)),
+    };
+
+    commitPlan(nextPlan, nextNotice);
   }
 
-  function saveSummaryState() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-      alert("Alterações salvas no navegador.");
-    } catch (error) {
-      console.warn("Não foi possível salvar no navegador.", error);
-    }
+  function updateSummaryField(field: keyof CourseSummary, value: string) {
+    updateCourse(
+      (course) => ({
+        ...course,
+        summary: {
+          ...course.summary,
+          [field]: value,
+        },
+      }),
+      "Plano atualizado"
+    );
   }
 
-  function downloadCurrentJson() {
-    const blob = new Blob([JSON.stringify(products, null, 2)], {
-      type: "application/json;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "plano_midia_medgrupo_abril_2026.json";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+  function updateMetaField(field: keyof CourseMeta, value: string) {
+    updateCourse(
+      (course) => ({
+        ...course,
+        meta: {
+          ...course.meta,
+          [field]: value,
+        },
+      }),
+      "Meta atualizada"
+    );
   }
 
-  if (!mounted) {
+  function updateChannel(channelId: ChannelId, updater: (channel: ChannelPlan) => ChannelPlan) {
+    updateCourse(
+      (course) => ({
+        ...course,
+        channels: course.channels.map((channel) => (channel.id === channelId ? updater(deepClone(channel)) : channel)),
+      }),
+      "Canal atualizado"
+    );
+  }
+
+  function updateWeek(channelId: ChannelId, weekIndex: number, updater: (week: WeekPlan) => WeekPlan) {
+    updateChannel(channelId, (channel) => ({
+      ...channel,
+      weeks: channel.weeks.map((week) => (week.weekIndex === weekIndex ? updater({ ...week }) : week)),
+    }));
+  }
+
+  function handleManualSave() {
+    commitPlan(plan, "Plano salvo no navegador");
+  }
+
+  function handlePrint() {
+    window.print();
+  }
+
+  if (!mounted || !activeCourse) {
     return (
       <>
         <div className="midia-page">
           <div className="canvas-wrap">
-            <div className="midia-card">
-              <p className="card-title">Carregando plano de mídia...</p>
+            <div className="panel-card">
+              <p className="section-eyebrow">Plano de mídia</p>
+              <h1 className="loading-title">Carregando plano…</h1>
             </div>
           </div>
         </div>
-
         <style jsx>{styles}</style>
       </>
     );
@@ -514,323 +949,270 @@ export default function MidiaPage() {
     <>
       <div className="midia-page">
         <div className="canvas-wrap">
-          <div className="medgrupo-header">
-            <div className="medgrupo-header-top">
-              <MedgrupoLogo />
-
-              <div className="page-title-wrap">
-                <h1 className="page-title">Plano de Mídia Abril 2026</h1>
-                <span className="page-subtitle">Visão por produto · mensal</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="products-toolbar">
-            <div className="products-tabs">
-              {products.map((product, index) => (
-                <button
-                  key={product.name}
-                  className={`tab-btn ${index === active ? "active" : ""}`}
-                  type="button"
-                  onClick={() => setActive(index)}
-                >
-                  {product.name}
-                </button>
-              ))}
+          <header className="page-header">
+            <div>
+              <p className="section-eyebrow">Plano de mídia</p>
+              <h1 className="page-title">Plano de Mídia {formatPeriodTitle(month, year)}</h1>
+              <p className="page-subtitle">Visão mensal por unidade de negócio e curso</p>
             </div>
 
-            <div className="summary-actions">
-              <button className="action-btn" type="button" onClick={saveSummaryState}>
-                Salvar no navegador
-              </button>
-              <button className="action-btn action-btn--accent" type="button" onClick={downloadCurrentJson}>
-                Baixar JSON atualizado
-              </button>
-            </div>
-          </div>
-
-          <div className="product-summary-bar">
-            <div className="product-summary-item">
-              <span className="product-summary-label">Produto</span>
-              <div className="product-summary-value">{activeProduct.header.productName}</div>
-            </div>
-
-            <EditableField
-              label="Descritivo do produto"
-              value={activeProduct.header.description}
-              onSave={(value) => updateHeaderField("description", value)}
-            />
-
-            <EditableField
-              label="Última campanha"
-              value={activeProduct.header.lastCampaign}
-              onSave={(value) => updateHeaderField("lastCampaign", value)}
-            />
-
-            <EditableField
-              label="Inovação"
-              value={activeProduct.header.innovation}
-              onSave={(value) => updateHeaderField("innovation", value)}
-            />
-
-            <EditableField
-              label="Desafio"
-              value={activeProduct.header.challenge}
-              onSave={(value) => updateHeaderField("challenge", value)}
-            />
-
-            <EditableField
-              label="Período e meta"
-              value={activeProduct.header.periodMeta}
-              onSave={(value) => updateHeaderField("periodMeta", value)}
-            />
-          </div>
-
-          <div className="grid">
-            <div className="midia-card">
-              <p className="card-title">Canais de marketing</p>
-
-              {activeProduct.alert ? <div className="alert-tag">◎ {activeProduct.alert}</div> : null}
-
-              {activeProduct.channels.map((channel) => (
-                <div className="channel-row" key={`${activeProduct.name}-${channel.name}`}>
-                  <div className="ch-left">
-                    <div className="ch-dot" style={{ background: channel.color }} />
-                    <span className="ch-name">{channel.name}</span>
-                    <span className="ch-tag">{channel.tag}</span>
-                  </div>
-
-                  <div className="ch-right">
-                    {channel.budget > 0 ? (
-                      <div className="bar-wrap">
-                        <div
-                          className="bar-fill"
-                          style={{
-                            width: `${Math.round((channel.budget / maxBudget) * 100)}%`,
-                            background: channel.color,
-                          }}
-                        />
-                      </div>
-                    ) : null}
-
-                    <span className="ch-budget">
-                      {channel.budget > 0 ? fmtBRL(channel.budget) : channel.note || "—"}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="midia-card">
-              <p className="card-title">Calendário de ações — mês</p>
-              <Calendar product={activeProduct} />
-            </div>
-
-            <div className="midia-card">
-              {total > 0 ? (
-                <>
-                  <div className="stacked-bar">
-                    {paidChannels.map((channel) => (
-                      <div
-                        key={`${activeProduct.name}-${channel.name}-stack`}
-                        style={{ flex: channel.budget, background: channel.color }}
-                      />
-                    ))}
-                  </div>
-
-                  {paidChannels.map((channel) => (
-                    <div className="legend-item" key={`${activeProduct.name}-${channel.name}-legend`}>
-                      <div className="leg-dot" style={{ background: channel.color }} />
-                      <span>{getLegendName(channel)}</span>
-                      <span className="legend-percent">{Math.round((channel.budget / total) * 100)}%</span>
-                      <span className="legend-value">{fmtBRL(channel.budget)}</span>
-                    </div>
+            <div className="header-controls no-print">
+              <label className="toolbar-field">
+                <span className="toolbar-label">Mês</span>
+                <select className="toolbar-select" value={month} onChange={(event) => setMonth(Number(event.target.value))}>
+                  {MONTHS.map((label, index) => (
+                    <option key={label} value={index}>
+                      {label}
+                    </option>
                   ))}
+                </select>
+              </label>
 
-                  {activeProduct.name !== "Extensivo" ? (
-                    <div className="cost-note">
-                      * E-mail Mktg, Redes Sociais/SEO e Telão: custo operacional.
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <div className="only-reactive">
-                  Apenas custo de disparo HSM. Produto em operação 100% reativa.
-                </div>
-              )}
+              <label className="toolbar-field">
+                <span className="toolbar-label">Ano</span>
+                <select className="toolbar-select" value={year} onChange={(event) => setYear(Number(event.target.value))}>
+                  {YEARS.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button type="button" className="action-btn" onClick={handleManualSave}>
+                Salvar plano
+              </button>
+              <button type="button" className="action-btn action-btn--accent" onClick={handlePrint}>
+                Imprimir plano em tela
+              </button>
+            </div>
+          </header>
+
+          <section className="chooser-card panel-card no-print">
+            <div className="chooser-block">
+              <span className="chooser-label">BU</span>
+              <div className="bu-tabs">
+                {BU_ORDER.map((bu) => (
+                  <button
+                    key={bu}
+                    type="button"
+                    className={`bu-tab ${bu === activeBU ? "is-active" : ""}`}
+                    onClick={() => {
+                      setActiveBU(bu);
+                      setActiveCourseId(getCourseId(COURSE_CATALOG[bu][0]));
+                    }}
+                  >
+                    {bu}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="midia-card">
-              <p className="card-title">Abordagem por etapa do funil</p>
+            <label className="chooser-block chooser-block--course">
+              <span className="chooser-label">Curso</span>
+              <select className="toolbar-select toolbar-select--wide" value={activeCourse.id} onChange={(event) => setActiveCourseId(event.target.value)}>
+                {coursesForBU.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.name}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-              {approachItems.map((item, index) => (
-                <div className="ap-item" key={`${item.badge}-${index}`}>
-                  <span className={`ap-badge ap-badge-${item.badge.toLowerCase()}`}>{item.badge}</span>
+            <div className="status-box">
+              <span className="status-label">Última atualização</span>
+              <strong>{formatUpdatedAt(plan.updatedAt)}</strong>
+              <span>{notice}</span>
+            </div>
+          </section>
 
-                  <div>
-                    <div className="ap-text">{item.text}</div>
-
-                    {item.channels?.length ? (
-                      <div className="ap-channels">
-                        {item.channels.map((channel) => (
-                          <span className="ap-ch" key={channel}>
-                            {channel}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+          <section className="hero-grid">
+            <div className="panel-card">
+              <div className="course-heading">
+                <div>
+                  <p className="section-eyebrow">Curso ativo</p>
+                  <h2 className="course-title">{activeCourse.name}</h2>
+                  <p className="course-bu">{activeCourse.bu}</p>
                 </div>
+                {activeCourse.alert ? <span className="alert-pill">◎ {activeCourse.alert}</span> : null}
+              </div>
+
+              <div className="summary-grid compact-summary-grid">
+                <Field label="Descritivo do produto" value={activeCourse.summary.description} onChange={(value) => updateSummaryField("description", value)} />
+                <Field label="Última campanha" value={activeCourse.summary.lastCampaign} onChange={(value) => updateSummaryField("lastCampaign", value)} />
+                <Field label="Inovação" value={activeCourse.summary.innovation} onChange={(value) => updateSummaryField("innovation", value)} />
+                <Field label="Desafio" value={activeCourse.summary.challenge} onChange={(value) => updateSummaryField("challenge", value)} />
+                <Field className="field-span-2" label="Período e meta" value={activeCourse.summary.periodSummary} onChange={(value) => updateSummaryField("periodSummary", value)} />
+              </div>
+            </div>
+
+            <div className="panel-card meta-panel">
+              <p className="section-eyebrow">Resumo executivo</p>
+              <div className="kpi-boxes">
+                <div className="kpi-box">
+                  <span className="kpi-label">Investimento mensal</span>
+                  <strong className="kpi-value">{formatCurrency(totalInvestment)}</strong>
+                  <small className="kpi-sub">soma dos canais planejados</small>
+                </div>
+                <div className="kpi-box">
+                  <span className="kpi-label">Inscrições</span>
+                  <input className="kpi-input" value={activeCourse.meta.inscricoes} onChange={(event) => updateMetaField("inscricoes", event.target.value)} />
+                  <small className="kpi-sub">meta mensal</small>
+                </div>
+                <div className="kpi-box">
+                  <span className="kpi-label">CPA</span>
+                  <input className="kpi-input" value={activeCourse.meta.cpa} onChange={(event) => updateMetaField("cpa", event.target.value)} />
+                  <small className="kpi-sub">custo por inscrição</small>
+                </div>
+              </div>
+
+              <Field label="Observações da meta" value={activeCourse.meta.note} onChange={(value) => updateMetaField("note", value)} textarea />
+            </div>
+          </section>
+
+          <section className="panel-card section-card">
+            <div className="section-head">
+              <div>
+                <p className="section-eyebrow">Canais de marketing</p>
+                <h3 className="section-title">Planejamento por canal</h3>
+              </div>
+              {activeCourse.alert ? <span className="alert-pill alert-pill--small">◎ {activeCourse.alert}</span> : null}
+            </div>
+
+            <div className="channel-grid">
+              {activeCourse.channels.map((channel) => (
+                <article className="channel-card" key={`${activeCourse.id}-${channel.id}`}>
+                  <div className="channel-card-head">
+                    <div className="channel-main">
+                      <div className="channel-name-row">
+                        <span className="channel-dot" style={{ background: channel.color }} />
+                        <strong className="channel-name">{channel.name}</strong>
+                        <span className="channel-tag">{channel.tag}</span>
+                        <span className="channel-tag">{channel.cadence === "continuous" ? "Contínuo" : "Semanal"}</span>
+                      </div>
+                      <span className="channel-value-display">{formatCompactCurrency(channel.value)}</span>
+                    </div>
+
+                    <div className="channel-budget-wrap">
+                      <div className="budget-track">
+                        <div className="budget-fill" style={{ width: `${Math.max((channel.value / maxChannelValue) * 100, channel.value > 0 ? 8 : 0)}%`, background: channel.color }} />
+                      </div>
+
+                      <label className="budget-input-wrap">
+                        <span className="field-label">Valor</span>
+                        <input
+                          className="field-control budget-input"
+                          inputMode="numeric"
+                          value={String(channel.value)}
+                          onChange={(event) => updateChannel(channel.id, (current) => ({ ...current, value: parseBudget(event.target.value) }))}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="channel-fields-grid">
+                    <Field label="Público" value={channel.audience} onChange={(value) => updateChannel(channel.id, (current) => ({ ...current, audience: value }))} />
+                    <Field label="Objetivo" value={channel.objective} onChange={(value) => updateChannel(channel.id, (current) => ({ ...current, objective: value }))} />
+                    <Field className="field-span-2" label="Justificativa" value={channel.justification} onChange={(value) => updateChannel(channel.id, (current) => ({ ...current, justification: value }))} textarea />
+                    <Field label="Consumo" value={channel.consumption} onChange={(value) => updateChannel(channel.id, (current) => ({ ...current, consumption: value }))} />
+                  </div>
+                </article>
               ))}
             </div>
+          </section>
 
-            <div className="midia-card">
-              <p className="card-title">Investimento mensal (mídia paga)</p>
-
-              <div className="inv-header">
-                <span className="inv-total">{total > 0 ? fmtFull(total) : "—"}</span>
-                <span className="inv-sub">{total > 0 ? "estimado/mês" : "reativo"}</span>
-              </div>
-
-              <div className="meta-card">
-                <p className="card-title">Meta do produto</p>
-
-                <div className="meta-inner">
-                  <div className="meta-kpi">
-                    <span className="meta-kpi-label">Inscrições</span>
-                    <span className="meta-kpi-value">{activeProduct.meta.inscricoes}</span>
-                    <span className="meta-kpi-sub">meta mensal</span>
-                  </div>
-
-                  <div className="meta-kpi">
-                    <span className="meta-kpi-label">CPA - custo por aquisição</span>
-                    <span className="meta-kpi-value">{activeProduct.meta.cpa}</span>
-                    <span className="meta-kpi-sub">estimado por inscrição</span>
-                  </div>
-                </div>
-
-                <div className="meta-note">{activeProduct.meta.note}</div>
+          <section className="panel-card section-card">
+            <div className="section-head">
+              <div>
+                <p className="section-eyebrow">Calendário de ações</p>
+                <h3 className="section-title">Execução do mês</h3>
               </div>
             </div>
-          </div>
+
+            <div className="calendar-scroll">
+              <table className="calendar-table">
+                <thead>
+                  <tr>
+                    <th className="calendar-course-col">Canal</th>
+                    {weekRanges.map((week) => (
+                      <th key={week.label}>
+                        <div className="week-head">
+                          <span>{week.label}</span>
+                          <small>{week.helper}</small>
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeCourse.channels.map((channel) => (
+                    <tr key={`${activeCourse.id}-${channel.id}-calendar`}>
+                      <td className="calendar-course-col">
+                        <div className="calendar-channel-name-wrap">
+                          <span className="channel-dot" style={{ background: channel.color }} />
+                          <div>
+                            <strong className="calendar-channel-name">{channel.name}</strong>
+                            <div className="calendar-channel-meta">
+                              <span>{channel.tag}</span>
+                              <span>{channel.cadence === "continuous" ? "Contínuo" : "Semanal"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {channel.weeks.map((week) => (
+                        <td key={`${channel.id}-${week.weekIndex}`}>
+                          <div className="week-card">
+                            <input
+                              type="date"
+                              min={monthBoundaries.min}
+                              max={monthBoundaries.max}
+                              className="field-control week-date"
+                              value={week.scheduledDate}
+                              onChange={(event) =>
+                                updateWeek(channel.id, week.weekIndex, (current) => ({
+                                  ...current,
+                                  scheduledDate: event.target.value,
+                                }))
+                              }
+                            />
+                            <input
+                              className="field-control"
+                              value={week.action}
+                              placeholder="Descreva a ação"
+                              onChange={(event) =>
+                                updateWeek(channel.id, week.weekIndex, (current) => ({
+                                  ...current,
+                                  action: event.target.value,
+                                }))
+                              }
+                            />
+                            <label className="week-check">
+                              <input
+                                type="checkbox"
+                                checked={week.completed}
+                                onChange={(event) =>
+                                  updateWeek(channel.id, week.weekIndex, (current) => ({
+                                    ...current,
+                                    completed: event.target.checked,
+                                  }))
+                                }
+                              />
+                              <span>{week.completed ? "Concluído" : "Marcar como concluído"}</span>
+                            </label>
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
       </div>
 
       <style jsx>{styles}</style>
-    </>
-  );
-}
-
-function EditableField({
-  label,
-  value,
-  onSave,
-}: {
-  label: string;
-  value: string;
-  onSave: (value: string) => void;
-}) {
-  return (
-    <div className="product-summary-item">
-      <span className="product-summary-label">{label}</span>
-      <div
-        className="product-summary-value is-editable"
-        contentEditable
-        suppressContentEditableWarning
-        onBlur={(e) => onSave(e.currentTarget.innerText)}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function Calendar({ product }: { product: Product }) {
-  const weeks = ["Sem 1", "Sem 2", "Sem 3", "Sem 4"];
-
-  return (
-    <>
-      <table className="cal-table">
-        <thead>
-          <tr>
-            <th className="ch-col">Canal</th>
-            {weeks.map((week) => (
-              <th key={week}>{week}</th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>
-          {product.channels.map((channel) => (
-            <tr key={`${product.name}-${channel.name}-calendar`}>
-              <td className="channel-cell">
-                <div className="calendar-channel-label">
-                  <div className="calendar-channel-dot" style={{ background: channel.color }} />
-                  <span className="calendar-channel-name">{channel.name}</span>
-                  <span className="calendar-channel-tag">{channel.tag}</span>
-                </div>
-              </td>
-
-              {weeks.map((_, weekIndex) => {
-                if (channel.type === "continuous") {
-                  const isCreative = product.creativeWeeks.includes(weekIndex);
-
-                  return (
-                    <td className="week-cell" key={`${channel.name}-${weekIndex}`}>
-                      <div className="pill-cont">
-                        <div
-                          className="bar-cont"
-                          style={{
-                            background: `${channel.color}22`,
-                            color: channel.color,
-                            border: `0.5px solid ${channel.color}55`,
-                          }}
-                        >
-                          Ativo
-                        </div>
-
-                        {isCreative ? <div className="update-badge">↻ criativo</div> : null}
-                      </div>
-                    </td>
-                  );
-                }
-
-                return (
-                  <td className="week-cell" key={`${channel.name}-${weekIndex}`}>
-                    <div
-                      className="ev-dot"
-                      style={{
-                        background: `${channel.color}22`,
-                        color: channel.color,
-                        border: `0.5px solid ${channel.color}66`,
-                      }}
-                    >
-                      1×
-                    </div>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div className="cal-legend">
-        <div className="cal-leg-item">
-          <div className="cal-leg-bar" />
-          Contínuo (mês todo)
-        </div>
-
-        <div className="cal-leg-item">
-          <div className="cal-leg-dot" />
-          1× por semana
-        </div>
-
-        <div className="cal-leg-item">
-          <span className="creative-pill">↻ criativo</span>
-          Novo criativo
-        </div>
-      </div>
     </>
   );
 }
@@ -843,648 +1225,611 @@ const styles = `
 
   .canvas-wrap {
     width: 100%;
-    max-width: 1280px;
+    max-width: 1500px;
     margin: 0 auto;
     padding: 24px;
   }
 
-  .medgrupo-header {
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
     margin-bottom: 18px;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    padding-bottom: 16px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
-  .medgrupo-header-top {
-    display: flex;
-    align-items: center;
-    gap: 22px;
-    flex-wrap: wrap;
-  }
-
-  .header-banner-logo {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-  }
-
-  .header-banner-logo__icon svg {
-    width: 40px;
-    height: 40px;
-    display: block;
-  }
-
-  .header-banner-logo__icon-text svg {
-    height: 18px;
-    width: auto;
-    fill: var(--color-text);
-    display: block;
-  }
-
-  .page-title-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 260px;
+  .page-title,
+  .loading-title,
+  .course-title {
+    margin: 0;
+    color: var(--color-text);
   }
 
   .page-title {
-    font-size: 20px;
+    font-size: 28px;
+    line-height: 1.1;
+    font-weight: 700;
+  }
+
+  .loading-title {
+    font-size: 22px;
     font-weight: 600;
-    color: var(--color-text);
-    margin: 0;
-    line-height: 1.2;
   }
 
-  .page-subtitle {
-    font-size: 12px;
+  .page-subtitle,
+  .course-bu {
+    margin: 6px 0 0;
     color: rgba(245, 247, 247, 0.68);
+    font-size: 13px;
   }
 
-  .products-toolbar {
+  .section-eyebrow,
+  .chooser-label,
+  .toolbar-label,
+  .field-label,
+  .kpi-label,
+  .status-label {
+    display: block;
+    margin: 0 0 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(245, 247, 247, 0.58);
+  }
+
+  .section-eyebrow {
+    margin-bottom: 8px;
+  }
+
+  .header-controls {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 16px;
     flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 10px;
   }
 
-  .summary-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
+  .toolbar-field {
+    min-width: 124px;
   }
 
-  .products-tabs {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .tab-btn {
-    padding: 6px 16px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1px solid rgba(255,255,255,0.08);
-    color: rgba(245, 247, 247, 0.68);
-    background: rgba(255,255,255,0.02);
-    transition: all 0.2s ease;
-  }
-
-  .tab-btn:hover {
-    border-color: rgba(255,255,255,0.14);
+  .toolbar-select,
+  .field-control,
+  .kpi-input {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
     color: var(--color-text);
-    background: rgba(255,255,255,0.04);
+    min-height: 42px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.18s ease, background 0.18s ease;
   }
 
-  .tab-btn.active {
-    background: rgba(217, 235, 26, 0.12);
-    color: var(--color-lime);
-    border-color: rgba(217, 235, 26, 0.38);
+  .toolbar-select:hover,
+  .field-control:hover,
+  .kpi-input:hover,
+  .toolbar-select:focus,
+  .field-control:focus,
+  .kpi-input:focus {
+    border-color: rgba(217, 235, 26, 0.34);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .field-control--textarea {
+    min-height: 88px;
+    resize: vertical;
   }
 
   .action-btn {
-    padding: 8px 14px;
+    min-height: 42px;
+    padding: 0 16px;
     border-radius: 999px;
-    border: 1px solid rgba(255,255,255,0.1);
-    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.02);
     color: var(--color-text);
-    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: 0.18s ease;
   }
 
   .action-btn:hover {
-    border-color: rgba(255,255,255,0.18);
-    background: rgba(255,255,255,0.05);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.18);
   }
 
   .action-btn--accent {
-    border-color: rgba(217, 235, 26, 0.38);
     color: var(--color-lime);
+    border-color: rgba(217, 235, 26, 0.34);
     background: rgba(217, 235, 26, 0.08);
   }
 
-  .product-summary-bar {
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
-    padding: 14px 16px;
-    background: var(--panel);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 20px;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.16);
+  .panel-card {
+    border-radius: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, rgba(18, 22, 22, 0.92), rgba(18, 22, 22, 0.84));
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.22);
+    padding: 18px;
   }
 
-  .product-summary-item {
+  .chooser-card {
+    display: grid;
+    grid-template-columns: 1.1fr 1.2fr 0.9fr;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 16px;
+  }
+
+  .chooser-block {
     min-width: 0;
   }
 
-  .product-summary-label {
+  .chooser-block--course {
     display: block;
-    font-size: 10px;
+  }
+
+  .bu-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .bu-tab {
+    min-height: 42px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(245, 247, 247, 0.76);
     font-weight: 600;
-    color: rgba(245, 247, 247, 0.62);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+
+  .bu-tab.is-active {
+    color: var(--color-lime);
+    border-color: rgba(217, 235, 26, 0.34);
+    background: rgba(217, 235, 26, 0.1);
+  }
+
+  .toolbar-select--wide {
+    width: 100%;
+  }
+
+  .status-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 42px;
+    justify-content: center;
+    padding: 10px 12px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: rgba(245, 247, 247, 0.7);
+    font-size: 12px;
+  }
+
+  .status-box strong {
+    color: var(--color-text);
+    font-size: 13px;
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.8fr);
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .course-heading,
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .course-title {
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  .alert-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(142, 26, 235, 0.34);
+    background: rgba(142, 26, 235, 0.14);
+    color: #d7b2ff;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .alert-pill--small {
+    min-height: 28px;
+    font-size: 10px;
+  }
+
+  .summary-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .compact-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field-wrap {
+    min-width: 0;
+  }
+
+  .field-span-2 {
+    grid-column: span 2;
+  }
+
+  .meta-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .kpi-boxes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .kpi-box {
+    padding: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .kpi-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1.1;
+  }
+
+  .kpi-input {
+    font-size: 20px;
+    font-weight: 700;
+    min-height: 46px;
+  }
+
+  .kpi-sub {
+    color: rgba(245, 247, 247, 0.64);
+    font-size: 11px;
+  }
+
+  .section-card {
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .channel-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .channel-card {
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.025);
+    padding: 14px;
+  }
+
+  .channel-card-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: 12px;
+    align-items: start;
+    margin-bottom: 12px;
+  }
+
+  .channel-main {
+    min-width: 0;
+  }
+
+  .channel-name-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
     margin-bottom: 6px;
   }
 
-  .product-summary-value {
-    display: block;
-    min-height: 44px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--color-text);
-    line-height: 1.45;
-    padding: 8px 10px;
-    border: 1px solid transparent;
-    border-radius: 12px;
-    outline: none;
-    transition: border-color 0.2s ease, background 0.2s ease;
-    white-space: pre-wrap;
-  }
-
-  .product-summary-value.is-editable {
-    background: rgba(255,255,255,0.02);
-    border-color: rgba(255,255,255,0.06);
-    cursor: text;
-  }
-
-  .product-summary-value.is-editable:hover,
-  .product-summary-value.is-editable:focus {
-    background: rgba(255,255,255,0.04);
-    border-color: rgba(217, 235, 26, 0.4);
-  }
-
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-  }
-
-  .midia-card,
-  .meta-card {
-    background: var(--panel);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 20px;
-    padding: 16px 18px;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.16);
-  }
-
-  .meta-card {
-    margin-top: 12px;
-  }
-
-  .card-title {
-    font-size: 11px;
-    font-weight: 600;
-    color: rgba(245, 247, 247, 0.62);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin: 0 0 16px;
-  }
-
-  .channel-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-  }
-
-  .channel-row:last-child {
-    border-bottom: none;
-  }
-
-  .ch-left,
-  .ch-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-
-  .ch-right {
-    flex-shrink: 0;
-  }
-
-  .ch-dot,
-  .leg-dot,
-  .cal-leg-dot {
+  .channel-dot {
     width: 8px;
     height: 8px;
     border-radius: 999px;
     flex-shrink: 0;
   }
 
-  .ch-name {
+  .channel-name,
+  .calendar-channel-name {
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 700;
     color: var(--color-text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
-  .ch-tag,
-  .ap-ch,
-  .update-badge {
-    font-size: 10px;
-    font-weight: 500;
-    color: rgba(245, 247, 247, 0.68);
-    background: rgba(255,255,255,0.04);
-    border-radius: 6px;
-    padding: 2px 6px;
-    white-space: nowrap;
-    border: 1px solid rgba(255,255,255,0.06);
-  }
-
-  .bar-wrap {
-    width: 60px;
-    height: 4px;
-    background: rgba(255,255,255,0.08);
+  .channel-tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 0 8px;
     border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(245, 247, 247, 0.72);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .channel-value-display {
+    font-size: 12px;
+    color: rgba(245, 247, 247, 0.76);
+    font-weight: 600;
+  }
+
+  .channel-budget-wrap {
+    display: grid;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .budget-track {
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
     overflow: hidden;
   }
 
-  .bar-fill {
+  .budget-fill {
     height: 100%;
     border-radius: 999px;
   }
 
-  .ch-budget {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--color-text);
-    min-width: 88px;
-    text-align: right;
+  .budget-input-wrap {
+    display: block;
   }
 
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: rgba(245, 247, 247, 0.72);
-    margin-bottom: 6px;
+  .budget-input {
+    min-height: 38px;
+    padding-top: 8px;
+    padding-bottom: 8px;
   }
 
-  .legend-percent {
-    margin-left: auto;
-    font-weight: 500;
-  }
-
-  .legend-value {
-    min-width: 72px;
-    text-align: right;
-    font-weight: 500;
-    color: var(--color-text);
-  }
-
-  .stacked-bar {
-    height: 8px;
-    border-radius: 999px;
-    overflow: hidden;
-    display: flex;
-    margin-bottom: 16px;
-    background: rgba(255,255,255,0.06);
-  }
-
-  .inv-header {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-  }
-
-  .inv-total {
-    font-size: 28px;
-    font-weight: 600;
-    color: var(--color-text);
-  }
-
-  .inv-sub {
-    font-size: 12px;
-    color: rgba(245, 247, 247, 0.62);
-  }
-
-  .ap-item {
-    display: flex;
-    align-items: flex-start;
+  .channel-fields-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
-    margin-bottom: 12px;
   }
 
-  .ap-item:last-child {
-    margin-bottom: 0;
+  .calendar-scroll {
+    overflow-x: auto;
   }
 
-  .ap-badge {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 999px;
-    white-space: nowrap;
-    margin-top: 1px;
-    flex-shrink: 0;
-    border: 1px solid transparent;
-  }
-
-  .ap-badge-topo {
-    background: rgba(72, 150, 150, 0.12);
-    color: var(--color-teal);
-    border-color: rgba(72, 150, 150, 0.3);
-  }
-
-  .ap-badge-meio {
-    background: rgba(142, 26, 235, 0.14);
-    color: #d7b2ff;
-    border-color: rgba(142, 26, 235, 0.32);
-  }
-
-  .ap-badge-fundo {
-    background: rgba(217, 235, 26, 0.12);
-    color: var(--color-lime);
-    border-color: rgba(217, 235, 26, 0.32);
-  }
-
-  .ap-text {
-    font-size: 13px;
-    color: rgba(245, 247, 247, 0.72);
-    line-height: 1.5;
-  }
-
-  .ap-channels {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 6px;
-  }
-
-  .alert-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: rgba(142, 26, 235, 0.14);
-    color: #d7b2ff;
-    border: 1px solid rgba(142, 26, 235, 0.3);
-    margin-bottom: 12px;
-    font-weight: 500;
-  }
-
-  .cal-table {
+  .calendar-table {
     width: 100%;
+    min-width: 1040px;
     border-collapse: collapse;
   }
 
-  .cal-table th {
-    font-size: 11px;
-    font-weight: 500;
-    color: rgba(245, 247, 247, 0.62);
-    text-align: center;
-    padding: 6px 4px;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+  .calendar-table th,
+  .calendar-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    vertical-align: top;
   }
 
-  .cal-table th.ch-col {
+  .calendar-table th {
     text-align: left;
-    padding-left: 0;
-    min-width: 120px;
+    color: rgba(245, 247, 247, 0.72);
+    font-size: 12px;
+    font-weight: 600;
   }
 
-  .cal-table td {
-    padding: 6px 4px;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    vertical-align: middle;
-  }
-
-  .cal-table tr:last-child td {
+  .calendar-table tr:last-child td {
     border-bottom: none;
   }
 
-  .channel-cell {
-    padding: 8px 0 !important;
+  .calendar-course-col {
+    width: 220px;
+    min-width: 220px;
   }
 
-  .calendar-channel-label {
+  .week-head {
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .week-head small,
+  .calendar-channel-meta {
+    color: rgba(245, 247, 247, 0.56);
+    font-size: 11px;
+  }
+
+  .calendar-channel-name-wrap {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding-top: 6px;
+  }
+
+  .calendar-channel-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .week-card {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+    min-width: 170px;
+  }
+
+  .week-date {
+    min-height: 38px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .week-check {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-  }
-
-  .calendar-channel-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    flex-shrink: 0;
-  }
-
-  .calendar-channel-name {
-    font-size: 12px;
-    color: var(--color-text);
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .calendar-channel-tag {
-    font-size: 10px;
-    color: rgba(245, 247, 247, 0.68);
-    background: rgba(255,255,255,0.04);
-    border-radius: 6px;
-    padding: 2px 6px;
-    white-space: nowrap;
-    border: 1px solid rgba(255,255,255,0.06);
-  }
-
-  .week-cell {
-    text-align: center;
-  }
-
-  .pill-cont {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    align-items: center;
-  }
-
-  .bar-cont {
-    height: 20px;
-    border-radius: 8px;
-    width: 90%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    font-weight: 600;
-  }
-
-  .ev-dot {
-    width: 22px;
-    height: 22px;
-    border-radius: 999px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    font-weight: 600;
-    margin: 0 auto;
-  }
-
-  .cal-legend {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-top: 16px;
-    padding-top: 12px;
-    border-top: 1px solid rgba(255,255,255,0.06);
-  }
-
-  .cal-leg-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    color: rgba(245, 247, 247, 0.74);
     font-size: 11px;
-    color: rgba(245, 247, 247, 0.68);
+    min-height: 24px;
   }
 
-  .cal-leg-bar {
-    width: 20px;
-    height: 8px;
-    border-radius: 999px;
-    background: rgba(72, 150, 150, 0.18);
-    border: 1px solid rgba(72, 150, 150, 0.34);
+  .week-check input {
+    accent-color: var(--color-lime);
   }
 
-  .cal-leg-dot {
-    background: rgba(217, 235, 26, 0.14);
-    border: 1px solid rgba(217, 235, 26, 0.34);
-  }
-
-  .creative-pill {
-    font-size: 9px;
-    padding: 2px 6px;
-    border-radius: 6px;
-    background: rgba(255,255,255,0.04);
-    color: rgba(245, 247, 247, 0.68);
-    border: 1px solid rgba(255,255,255,0.06);
-  }
-
-  .meta-inner {
-    display: flex;
-    gap: 16px;
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-
-  .meta-kpi {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
-    min-width: 180px;
-    background: rgba(255,255,255,0.03);
-    border-radius: 16px;
-    padding: 16px;
-    border: 1px solid rgba(255,255,255,0.05);
-  }
-
-  .meta-kpi-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: rgba(245, 247, 247, 0.62);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .meta-kpi-value {
-    font-size: 26px;
-    font-weight: 600;
-    color: var(--color-text);
-  }
-
-  .meta-kpi-sub,
-  .meta-note,
-  .cost-note,
-  .only-reactive {
-    font-size: 12px;
-    color: rgba(245, 247, 247, 0.68);
-  }
-
-  .meta-note {
-    margin-top: 12px;
-    line-height: 1.6;
-  }
-
-  .cost-note {
-    border-top: 1px solid rgba(255,255,255,0.06);
-    margin-top: 12px;
-    padding-top: 12px;
-  }
-
-  .only-reactive {
-    font-size: 13px;
-  }
-
-  @media (max-width: 1100px) {
-    .product-summary-bar {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 900px) {
-    .grid {
+  @media (max-width: 1280px) {
+    .channel-grid {
       grid-template-columns: 1fr;
     }
 
-    .ch-budget {
-      min-width: 72px;
-    }
-
-    .product-summary-bar {
-      grid-template-columns: 1fr 1fr;
+    .hero-grid,
+    .chooser-card {
+      grid-template-columns: 1fr;
     }
   }
 
-  @media (max-width: 760px) {
-    .products-toolbar {
+  @media (max-width: 980px) {
+    .page-header,
+    .section-head,
+    .course-heading {
+      flex-direction: column;
       align-items: stretch;
     }
 
-    .summary-actions {
-      width: 100%;
+    .header-controls {
+      justify-content: flex-start;
     }
 
-    .product-summary-bar {
+    .channel-card-head,
+    .compact-summary-grid,
+    .channel-fields-grid,
+    .kpi-boxes {
       grid-template-columns: 1fr;
     }
 
-    .product-summary-value {
-      min-height: 0;
-    }
-
-    .canvas-wrap {
-      padding: 16px;
+    .field-span-2 {
+      grid-column: span 1;
     }
   }
 
-  @media (max-width: 640px) {
-    .page-title {
-      font-size: 18px;
+  @media (max-width: 720px) {
+    .canvas-wrap {
+      padding: 16px;
     }
 
-    .product-summary-bar {
-      grid-template-columns: 1fr;
+    .page-title {
+      font-size: 24px;
+    }
+
+    .action-btn,
+    .toolbar-select,
+    .field-control,
+    .kpi-input {
+      min-height: 40px;
+    }
+  }
+
+  @media print {
+    :global(body) {
+      background: #fff !important;
+      color: #000 !important;
+    }
+
+    .midia-page {
+      color: #000;
+    }
+
+    .canvas-wrap {
+      max-width: none;
+      padding: 0;
+    }
+
+    .no-print {
+      display: none !important;
+    }
+
+    .panel-card,
+    .channel-card,
+    .week-card,
+    .kpi-box {
+      background: #fff !important;
+      color: #000 !important;
+      box-shadow: none !important;
+      border-color: rgba(0, 0, 0, 0.12) !important;
+    }
+
+    .page-title,
+    .course-title,
+    .section-title,
+    .channel-name,
+    .calendar-channel-name,
+    .kpi-value {
+      color: #000 !important;
+    }
+
+    .page-subtitle,
+    .course-bu,
+    .section-eyebrow,
+    .chooser-label,
+    .toolbar-label,
+    .field-label,
+    .kpi-label,
+    .status-label,
+    .calendar-channel-meta,
+    .week-head small,
+    .kpi-sub,
+    .status-box,
+    .channel-value-display,
+    .channel-tag,
+    .alert-pill {
+      color: rgba(0, 0, 0, 0.72) !important;
+      background: transparent !important;
+    }
+
+    .toolbar-select,
+    .field-control,
+    .kpi-input {
+      color: #000 !important;
+      border-color: rgba(0, 0, 0, 0.14) !important;
+      background: transparent !important;
     }
   }
 `;

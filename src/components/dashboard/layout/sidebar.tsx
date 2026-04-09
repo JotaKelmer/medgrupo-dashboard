@@ -13,6 +13,7 @@ type NavItem = {
   label: string;
   icon: string;
   external?: boolean;
+  disabled?: boolean;
 };
 
 export function Sidebar() {
@@ -25,10 +26,6 @@ export function Sidebar() {
 
   const primaryItems = useMemo<NavItem[]>(() => {
     const items: NavItem[] = [];
-
-    if (permissions.geral?.canView) {
-      items.push({ href: "/dashboard/geral", label: "Geral", icon: "◧" });
-    }
 
     if (permissions.plano_midia?.canView) {
       items.push({
@@ -46,6 +43,14 @@ export function Sidebar() {
       });
     }
 
+    if (permissions.geral?.canView) {
+      items.push({
+        href: "/dashboard/geral",
+        label: "Geral",
+        icon: "◧",
+      });
+    }
+
     if (permissions.excelencia_comercial?.canView) {
       items.push({
         href: "https://mdg.revlabs.com.br/",
@@ -54,6 +59,13 @@ export function Sidebar() {
         external: true,
       });
     }
+
+    items.push({
+      href: "#",
+      label: "Em breve",
+      icon: "◜",
+      disabled: true,
+    });
 
     return items;
   }, [permissions]);
@@ -121,7 +133,23 @@ export function Sidebar() {
 
         <nav className="mt-6 space-y-2">
           {primaryItems.map((item) => {
-            const active = !item.external && pathname.startsWith(item.href);
+            const active =
+              !item.external && !item.disabled && pathname.startsWith(item.href);
+
+            if (item.disabled) {
+              return (
+                <div
+                  key={`${item.label}-${item.href}`}
+                  className="flex cursor-not-allowed items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-white/35"
+                  aria-disabled="true"
+                >
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/6 bg-white/3 text-base">
+                    {item.icon}
+                  </span>
+                  <span>{item.label}</span>
+                </div>
+              );
+            }
 
             return (
               <Link
