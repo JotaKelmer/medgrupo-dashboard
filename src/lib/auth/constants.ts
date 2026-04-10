@@ -45,4 +45,4 @@ export const APP_MODULE_LABELS: Record<AppModule, string> = {
 };
 
 export const DEFAULT_AFTER_LOGIN_PATH = "/dashboard/geral";
-export const MAX_WORKSPACE_USERS = Number(process.env.MAX_WORKSPACE_USERS || "10");
+export const MAX_WORKSPACE_USERS = Number(process.env.MAX_WORKSPACE_USERS || "100");
