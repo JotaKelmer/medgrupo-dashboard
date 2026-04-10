@@ -59,9 +59,18 @@ async function getAppContextInternal(): Promise<AppContext | null> {
 
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
 
+  if (userError) {
+    console.error("[auth][guards] getUser error", {
+      message: userError.message,
+    });
+    return null;
+  }
+
   if (!user) {
+    console.error("[auth][guards] no user in server session");
     return null;
   }
 
@@ -75,6 +84,12 @@ async function getAppContextInternal(): Promise<AppContext | null> {
     .maybeSingle();
 
   if (memberError || !workspaceMember) {
+    console.error("[auth][guards] workspace member missing", {
+      userId: user.id,
+      email: user.email ?? null,
+      memberError: memberError?.message ?? null,
+      workspaceMemberFound: Boolean(workspaceMember),
+    });
     return null;
   }
 
@@ -84,8 +99,22 @@ async function getAppContextInternal(): Promise<AppContext | null> {
     .eq("workspace_member_id", workspaceMember.id);
 
   if (permissionsError) {
+    console.error("[auth][guards] permissions query error", {
+      userId: user.id,
+      workspaceMemberId: workspaceMember.id,
+      message: permissionsError.message,
+    });
     return null;
   }
+
+  console.log("[auth][guards] context ok", {
+    userId: user.id,
+    email: user.email ?? null,
+    workspaceMemberId: workspaceMember.id,
+    role: workspaceMember.role,
+    status: workspaceMember.status,
+    permissionsCount: permissionRows?.length ?? 0,
+  });
 
   const permissions = { ...EMPTY_PERMISSIONS };
 
