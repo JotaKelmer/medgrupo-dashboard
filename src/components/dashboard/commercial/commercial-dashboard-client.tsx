@@ -17,9 +17,163 @@ import {
   aggregateCommercialMetrics,
   buildCommercialSummary,
   buildCommercialWeeklyPerformance,
-  buildLeaderboardBuckets,
 } from "@/lib/commercial/calculations";
-import type { CommercialOverviewData } from "@/lib/commercial/types";
+import type {
+  CommercialAggregatedMetric,
+  CommercialOverviewData,
+} from "@/lib/commercial/types";
+import { formatNumber } from "@/lib/commercial/utils";
+
+function formatPeriodDate(value: string) {
+  const date = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+function buildPrintHtml(params: {
+  title: string;
+  startDate: string;
+  endDate: string;
+  rows: CommercialAggregatedMetric[];
+}) {
+  const { title, startDate, endDate, rows } = params;
+  const summary = buildCommercialSummary(rows);
+
+  const tableRows = rows
+    .map((row, index) => {
+      const totalClosed = row.dealsWonYesterday + row.dealsLostYesterday;
+      const conversion =
+        totalClosed > 0 ? (row.dealsWonYesterday / totalClosed) * 100 : 0;
+
+      return `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${row.ownerName}</td>
+          <td>${formatNumber(row.score)}</td>
+          <td>${formatNumber(row.totalOpenDeals)}</td>
+          <td>${(row.coveragePercent * 100).toFixed(1)}%</td>
+          <td>${formatNumber(row.activitiesDoneYesterday)}</td>
+          <td>${formatNumber(row.dealsAdvancedYesterday)}</td>
+          <td>${formatNumber(row.dealsWonYesterday)}</td>
+          <td>${formatNumber(row.dealsLostYesterday)}</td>
+          <td>${((1 - row.stagnantPercent) * 100).toFixed(1)}% / ${conversion.toFixed(0)}%</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <!doctype html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8" />
+        <title>Relatório Comercial</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            padding: 32px;
+            color: #111827;
+          }
+          h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+          }
+          .muted {
+            color: #4b5563;
+            margin-bottom: 24px;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+          }
+          .card {
+            border: 1px solid #d1d5db;
+            border-radius: 12px;
+            padding: 16px;
+          }
+          .card strong {
+            display: block;
+            font-size: 12px;
+            color: #4b5563;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+          }
+          .card span {
+            font-size: 24px;
+            font-weight: bold;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+          }
+          th, td {
+            border: 1px solid #d1d5db;
+            padding: 10px;
+            text-align: left;
+            font-size: 13px;
+          }
+          th {
+            background: #f3f4f6;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>${title}</h1>
+        <div class="muted">
+          Período: ${formatPeriodDate(startDate)} a ${formatPeriodDate(endDate)}
+        </div>
+
+        <div class="grid">
+          <div class="card">
+            <strong>Cobertura</strong>
+            <span>${(summary.coverage * 100).toFixed(0)}%</span>
+          </div>
+          <div class="card">
+            <strong>Atividades</strong>
+            <span>${formatNumber(summary.activities)}</span>
+          </div>
+          <div class="card">
+            <strong>Avanços</strong>
+            <span>${formatNumber(summary.advances)}</span>
+          </div>
+          <div class="card">
+            <strong>Qualidade</strong>
+            <span>${(summary.quality * 100).toFixed(0)}%</span>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Pos</th>
+              <th>Vendedor</th>
+              <th>Pontuação</th>
+              <th>Negócios</th>
+              <th>Cobertura</th>
+              <th>Atividades</th>
+              <th>Avanços</th>
+              <th>Ganhos</th>
+              <th>Perdas</th>
+              <th>Qualidade / Conversão</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+}
 
 export function CommercialDashboardClient({
   initialData,
@@ -32,9 +186,11 @@ export function CommercialDashboardClient({
   const [startDate, setStartDate] = useState(initialData.filters.startDate);
   const [endDate, setEndDate] = useState(initialData.filters.endDate);
   const [ownerId, setOwnerId] = useState(initialData.filters.ownerId);
-  const [focusedSellerId, setFocusedSellerId] = useState<string | null>(null);
+  const [selectedFeedbackSeller, setSelectedFeedbackSeller] =
+    useState<CommercialAggregatedMetric | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [feedbackRefreshToken, setFeedbackRefreshToken] = useState(0);
 
   const sellerOptions = useMemo(() => {
     if (initialData.role !== "viewer" || !initialData.viewerEmail) {
@@ -75,31 +231,10 @@ export function CommercialDashboardClient({
     return previousAggregated.filter((row) => row.ownerId === safeOwnerId);
   }, [previousAggregated, safeOwnerId]);
 
-  const summary = useMemo(
-    () => buildCommercialSummary(filteredRows),
-    [filteredRows],
-  );
-
-  const previousSummary = useMemo(
-    () => buildCommercialSummary(previousFilteredRows),
-    [previousFilteredRows],
-  );
-
-  const leaderboard = useMemo(
-    () => buildLeaderboardBuckets(filteredRows),
-    [filteredRows],
-  );
-
   const selectedSeller = useMemo(() => {
-    if (!filteredRows.length) return null;
-    if (focusedSellerId) {
-      return filteredRows.find((row) => row.ownerId === focusedSellerId) ?? null;
-    }
-    if (safeOwnerId !== "all") {
-      return filteredRows[0] ?? null;
-    }
-    return null;
-  }, [filteredRows, focusedSellerId, safeOwnerId]);
+    if (safeOwnerId === "all") return null;
+    return filteredRows[0] ?? null;
+  }, [filteredRows, safeOwnerId]);
 
   const weeklyPoints = useMemo(
     () =>
@@ -124,6 +259,7 @@ export function CommercialDashboardClient({
       );
     }
 
+    setSelectedFeedbackSeller(null);
     router.push(`${pathname}?${params.toString()}`);
   }
 
@@ -137,7 +273,7 @@ export function CommercialDashboardClient({
 
   function handleOwnerChange(event: ChangeEvent<HTMLSelectElement>) {
     setOwnerId(event.target.value);
-    setFocusedSellerId(null);
+    setSelectedFeedbackSeller(null);
   }
 
   async function handleSync() {
@@ -150,7 +286,10 @@ export function CommercialDashboardClient({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ startDate, endDate }),
+        body: JSON.stringify({
+          startDate: initialData.filters.startDate,
+          endDate: initialData.filters.endDate,
+        }),
       });
 
       const payload = (await response.json()) as {
@@ -171,6 +310,39 @@ export function CommercialDashboardClient({
     } finally {
       setIsSyncing(false);
     }
+  }
+
+  function handlePrint() {
+    if (typeof window === "undefined") return;
+
+    const title =
+      safeOwnerId === "all"
+        ? "Relatório de Performance do Time"
+        : `Relatório de Performance de ${selectedSeller?.ownerName ?? "Vendedor"}`;
+
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=1100,height=900");
+
+    if (!popup) {
+      window.print();
+      return;
+    }
+
+    popup.document.open();
+    popup.document.write(
+      buildPrintHtml({
+        title,
+        startDate: initialData.filters.startDate,
+        endDate: initialData.filters.endDate,
+        rows: filteredRows,
+      }),
+    );
+    popup.document.close();
+
+    popup.onload = () => {
+      popup.focus();
+      popup.print();
+      popup.close();
+    };
   }
 
   const canManageUsers =
@@ -212,22 +384,11 @@ export function CommercialDashboardClient({
                 </Button>
               </Link>
             ) : null}
-
-            {initialData.canEdit ? (
-              <Button
-                type="button"
-                onClick={handleSync}
-                disabled={isSyncing || initialData.isMock}
-                className="border border-[var(--color-lime)]/25 bg-[var(--color-lime)] text-[var(--color-bg)]"
-              >
-                {isSyncing ? "Sincronizando..." : "Sincronizar CRM"}
-              </Button>
-            ) : null}
           </div>
         </div>
 
         <div className="border-t border-white/8 bg-white/[0.02] px-5 py-4 sm:px-6">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto_auto]">
             <div>
               <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">
                 Início
@@ -238,6 +399,7 @@ export function CommercialDashboardClient({
                 onChange={handleStartDateChange}
               />
             </div>
+
             <div>
               <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">
                 Fim
@@ -248,6 +410,7 @@ export function CommercialDashboardClient({
                 onChange={handleEndDateChange}
               />
             </div>
+
             <div>
               <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-white/45">
                 Vendedor
@@ -262,7 +425,7 @@ export function CommercialDashboardClient({
                 disabled={initialData.role === "viewer"}
               >
                 {initialData.role !== "viewer" ? (
-                  <option value="all">Visão geral</option>
+                  <option value="all">Visão Geral (Todos)</option>
                 ) : null}
                 {sellerOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -271,11 +434,35 @@ export function CommercialDashboardClient({
                 ))}
               </Select>
             </div>
+
             <div className="flex items-end">
-              <Button type="button" className="w-full" onClick={applyFilters}>
-                Aplicar filtros
+              <Button type="button" className="w-full" onClick={handlePrint}>
+                Imprimir PDF
               </Button>
             </div>
+
+            <div className="flex items-end">
+              {initialData.canEdit ? (
+                <Button
+                  type="button"
+                  onClick={handleSync}
+                  disabled={isSyncing || initialData.isMock}
+                  className="w-full border border-[var(--color-lime)]/25 bg-[var(--color-lime)] text-[var(--color-bg)]"
+                >
+                  {isSyncing ? "Atualizando..." : "Atualizar Dados"}
+                </Button>
+              ) : (
+                <Button type="button" className="w-full" onClick={applyFilters}>
+                  Aplicar filtros
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 flex justify-end">
+            <Button type="button" className="min-w-[180px]" onClick={applyFilters}>
+              Aplicar filtros
+            </Button>
           </div>
 
           {syncMessage ? (
@@ -284,18 +471,23 @@ export function CommercialDashboardClient({
         </div>
       </Card>
 
-      <CommercialKpis summary={summary} previousSummary={previousSummary} />
+      <CommercialKpis
+        rows={filteredRows}
+        previousRows={previousFilteredRows}
+        teamRows={aggregated}
+        selectedOwnerId={safeOwnerId}
+      />
 
       {safeOwnerId === "all" ? <CommercialPodium rows={aggregated} /> : null}
 
       <CommercialRankingTable
         rows={filteredRows}
         selectedOwnerId={safeOwnerId}
-        onOpenFeedback={(row) => setFocusedSellerId(row.ownerId)}
+        onOpenFeedback={(row) => setSelectedFeedbackSeller(row)}
       />
 
       {selectedSeller ? (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
           <CommercialCharts
             points={weeklyPoints}
             sellerName={selectedSeller.ownerName}
@@ -308,72 +500,26 @@ export function CommercialDashboardClient({
             }}
             canEdit={initialData.canEdit}
             feedbackEnabled={feedbackEnabled}
+            refreshToken={feedbackRefreshToken}
+            onSaved={() => setFeedbackRefreshToken((value) => value + 1)}
           />
         </div>
       ) : null}
 
-      {safeOwnerId === "all" ? (
-        <div className="grid gap-4 xl:grid-cols-3">
-          <Card className="p-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-              Top 20%
-            </p>
-            <h3 className="mt-2 text-lg font-semibold text-white">Grupo A</h3>
-            <div className="mt-4 space-y-2 text-sm text-white/70">
-              {leaderboard.topA.length ? (
-                leaderboard.topA.map((row) => (
-                  <div
-                    key={row.ownerId}
-                    className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/3 px-3 py-2"
-                  >
-                    <span>{row.ownerName}</span>
-                    <span className="text-[var(--color-lime)]">{row.score}</span>
-                  </div>
-                ))
-              ) : (
-                <p>Sem registros.</p>
-              )}
-            </div>
-          </Card>
-
-          <Card className="p-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-              Faixa principal
-            </p>
-            <h3 className="mt-2 text-lg font-semibold text-white">
-              Miolo da operação
-            </h3>
-            <p className="mt-4 text-sm leading-6 text-white/65">
-              {leaderboard.middle70.length
-                ? `${leaderboard.middle70.length} vendedor(es) compõem a faixa central do ranking neste recorte.`
-                : "Com poucos vendedores no período, a maior parte ficou concentrada nas faixas extremas."}
-            </p>
-          </Card>
-
-          <Card className="p-5">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-              Bottom 10%
-            </p>
-            <h3 className="mt-2 text-lg font-semibold text-white">
-              Pontos de atenção
-            </h3>
-            <div className="mt-4 space-y-2 text-sm text-white/70">
-              {leaderboard.bottomC.length ? (
-                leaderboard.bottomC.map((row) => (
-                  <div
-                    key={row.ownerId}
-                    className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/3 px-3 py-2"
-                  >
-                    <span>{row.ownerName}</span>
-                    <span className="text-white/55">{row.score}</span>
-                  </div>
-                ))
-              ) : (
-                <p>Sem registros.</p>
-              )}
-            </div>
-          </Card>
-        </div>
+      {selectedFeedbackSeller ? (
+        <SellerFeedbackPanel
+          mode="modal"
+          selectedSeller={selectedFeedbackSeller}
+          filters={{
+            startDate: initialData.filters.startDate,
+            endDate: initialData.filters.endDate,
+          }}
+          canEdit={initialData.canEdit}
+          feedbackEnabled={feedbackEnabled}
+          refreshToken={feedbackRefreshToken}
+          onSaved={() => setFeedbackRefreshToken((value) => value + 1)}
+          onClose={() => setSelectedFeedbackSeller(null)}
+        />
       ) : null}
     </div>
   );
