@@ -53,10 +53,9 @@ export function Sidebar() {
 
     if (permissions.excelencia_comercial?.canView) {
       items.push({
-        href: "https://mdg.revlabs.com.br/",
+        href: "/dashboard/comercial",
         label: "Comercial",
-        icon: "↗",
-        external: true,
+        icon: "◩",
       });
     }
 
@@ -221,6 +220,9 @@ export function Sidebar() {
                 ⚙
               </span>
               <span>Configurações</span>
+              <span className="ml-auto text-xs text-white/45">
+                {settingsOpen ? "▲" : "▼"}
+              </span>
             </button>
           ) : null}
         </div>
